@@ -1,0 +1,20 @@
+{
+	"short_name": "Riding on it",
+  	"name": "I'm riding on it!",
+	"display": "fullscreen",
+	"orientation": "portrait",
+	"icons": [
+        {
+            "src": "https://vgrcanada.org/games/ridingonit/android-chrome-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "https://vgrcanada.org/games/ridingonit/android-chrome-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ],
+    "theme_color": "#ffffff",
+    "background_color": "#ffffff"
+}

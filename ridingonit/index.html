@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="I'm riding on it!">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#ffffff">
+
+    <title>I'm riding on it!</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #info { position: absolute; top: 10px; text-align: center; z-index: 100; color: white; background-color:black; padding:5px; border-radius:5px; }
+        #dashboard {
+            display: none; 
+            position:absolute; 
+            top:1px; left:50%; 
+            transform: translateX(-50%); 
+            text-align:center; 
+            z-index:10; 
+            min-width:350px; 
+            max-height:10%; 
+            color:white; 
+            padding:3px; 
+            border-radius:15px;
+            font-size:4vw;
+            }
+        #chances {margin:5px;}
+        #collisions {margin:5px;  min-width:4vw; min-height:3vw; border-radius:3vw; background-color: rgba(0,255,0,0.5); padding:7px; display: inline-block; color:black;}
+        #totalpointscontained { margin:5px; min-height:2vw; vertical-align: middle; padding:7px; border-radius:3px; background-color: rgba(255,255,255,0.5); display: inline-block; color:black;}
+        #nuggetscontained { margin:5px; min-height:2vw; vertical-align: middle; padding:7px; border-radius:3px; background-color: rgba(255,255,255,0.5); display: inline-block; color:black;}
+        #totalPoints {color:black;}
+        #Announcement {display: block; position:absolute; width:50%; height:50%; margin-left:25%; bottom:25%; background-color:white; color:darkgray; text-align:center;}
+        button{font-size:large;}
+        #pauseButton { display: none; position:absolute; top:1px; right:1px; color:white; font-size:3vw; cursor: pointer; }
+        #countdown { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 5vw; color: white; background-color: black; padding: 20px; border-radius: 10px; }
+   </style>
+</head>
+<body>
+
+<!-- Add the audio element here -->
+<audio id="backgroundAudio" src="sounds/RiverStream.mp3" loop></audio>
+<audio id="collisionAudio" src="sounds/collision.mp3"></audio>
+<audio id="treasureAudio" src="sounds/treasureFound.mp3"></audio>
+<audio id="turnAudio" src="sounds/turn.mp3"></audio>
+<audio id="Quote1" src="sounds/61-0429E-The-Uncertain-Sound-_69m-54s-70m-12s_-VGR.mp3"></audio>
+<audio id="Quote2" src="sounds/61-0429E-The-Uncertain-Sound-_91m-7s-91m-20s_-VGR.mp3"></audio>
+<audio id="Quote3" src="sounds/63-0114-A-Trumpet-Gives-An-Uncertain-Sound-_86m-37s-87m-3s_-VGR.mp3"></audio>
+<audio id="Quote4" src="sounds/63-0114-A-Trumpet-Gives-An-Uncertain-Sound-_91m-8s-91m-26s_-VGR.mp3"></audio>
+<audio id="Quote5" src="sounds/63-0114-A-Trumpet-Gives-An-Uncertain-Sound-_92m-5s-92m-45s_-VGR.mp3"></audio>
+<audio id="Quote6" src="sounds/63-0608-Conferences-_98m-14s-98m-39s_-VGR.mp3"></audio>
+<audio id="Quote7" src="sounds/63-0608-Conferences-_98m-57s-99m-21s_-VGR.mp3"></audio>
+<audio id="Quote8" src="sounds/64-0206E-Gods-Provided-Way-For-This-Day-_39m-28s-39m-46s_-VGR.mp3"></audio>
+
+<script>
+    let simpleNoise = `
+  float N (vec2 st) { // https://thebookofshaders.com/10/
+      return fract( sin( dot( st.xy, vec2(12.9898,78.233 ) ) ) *  43758.5453123);
+  }
+  
+  float smoothNoise( vec2 ip ){ 
+      vec2 lv = fract( ip );
+    vec2 id = floor( ip );
+    
+    lv = lv * lv * ( 3. - 2. * lv );
+    
+    float bl = N( id );
+    float br = N( id + vec2( 1, 0 ));
+    float b = mix( bl, br, lv.x );
+    
+    float tl = N( id + vec2( 0, 1 ));
+    float tr = N( id + vec2( 1, 1 ));
+    float t = mix( tl, tr, lv.x );
+    
+    return mix( b, t, lv.y );
+  }
+`;
+</script>
+
+<script type="importmap">
+  {
+    "imports": {
+        "three": "./three.module.js",
+        "three/addons/": "./addons/"
+    }
+  }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { WaterRefractionShader } from 'three/addons/shaders/WaterRefractionShader.js';
+import { Water } from 'three/addons/objects/Water.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+
+    let scene, camera;
+    let river, forest, character;
+    let fillLight, directionalLight, dirGroup;
+    let sky, sun;
+    let obstacles = [];
+    let nuggets = [];
+    let trees = [];
+    let fishes = [];
+    let grasss = [];
+
+
+    let lanePositions = [-2, 0, 2];
+    let currentLane = 1;
+    let speed = 0.3;
+    let hits = 0;
+    let chances = 3;
+    const SUBMERGE_AMOUNT = 0.1; // Or whatever value works best (e.g., 0.05, 0.2)
+    let CharacterInitialY = 0;
+    let characterBaseYOffset = 0; // Initialize, it will be set in addCharacter()
+
+    let targetCharacterRotationY = 1;//DEFAULT_CHARACTER_ROTATION_Y; // The rotation we want to smoothly animate to
+    let rotationSpeed = 0.1; // How quickly the character rotates back to default (adjust this)
+
+    let treasures = 0;
+    let water; 
+    const clock = new THREE.Clock();
+    let QuoteNumber;
+    let RandomQuote = null;
+    let totalPoints = 0;
+    let isTransitioning = false;
+    let targetLane;
+    let isPaused = false;
+    let terrainHeight;
+
+    // Variables for camera shake
+    let shakeDuration = 0;
+    let shakeTime = 0;
+
+    // Variables for controlling frame rate
+    let lastTime = 0;
+    const fps = 30;
+    const interval = 1000 / fps;
+
+/// Grass animation & shader
+const vertexShader = `
+  varying vec2 vUv;
+  uniform float time;
+  
+  ${simpleNoise}
+  
+	void main() {
+
+    vUv = uv;
+    float t = time * 2.;
+    
+    // VERTEX POSITION
+    
+    vec4 mvPosition = vec4( position, 1.0 );
+    #ifdef USE_INSTANCING
+    	mvPosition = instanceMatrix * mvPosition;
+    #endif
+    
+    // DISPLACEMENT
+    
+    float noise = smoothNoise(mvPosition.xz * 0.5 + vec2(0., t));
+    noise = pow(noise * 0.5 + 0.5, 2.) * 2.;
+    
+    // here the displacement is made stronger on the blades tips.
+    float dispPower = 1. - cos( uv.y * 3.1416 * 0.5 );
+    
+    float displacement = noise * ( 0.3 * dispPower );
+    mvPosition.z -= displacement;
+    
+    //
+    
+    vec4 modelViewPosition = modelViewMatrix * mvPosition;
+    gl_Position = projectionMatrix * modelViewPosition;
+
+	}
+`;
+
+const fragmentShader = `
+  varying vec2 vUv;
+  
+  void main() {
+  	vec3 baseColor = vec3( 0.41, 1.0, 0.5 );
+    float clarity = ( vUv.y * 0.875 ) + 0.125;
+    gl_FragColor = vec4( baseColor * clarity, 1 );
+  }
+`;
+
+const uniforms = {
+	time: {
+  	value: 0
+  }
+}
+
+const leavesMaterial = new THREE.ShaderMaterial({
+	vertexShader,
+  fragmentShader,
+  uniforms,
+  side: THREE.DoubleSide
+});
+
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.shadowMap.enabled = true;
+    //renderer.shadowMapSoft = false;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+         // Initialize the loading manager
+ const manager = new THREE.LoadingManager();
+    manager.onLoad = () => {
+      console.log('All assets loaded');
+      init();
+      initSky();
+      animate();
+    };
+    manager.onError = (url) => {
+      console.error('There was an error loading ' + url);
+    };
+    const textureLoader = new THREE.TextureLoader();
+
+        const nuggetTexture = textureLoader.load('media/goldnugget.png');
+        const waterTexture = textureLoader.load('media/waternormals.jpg');
+        /// Load terrain
+        const heightMapImage = textureLoader.load('media/HeightMap.jpg');
+        const HeightMapTexture = textureLoader.load('media/HeightMapTexture.jpg');
+        const waterNormals = new THREE.TextureLoader().load('media/waternormals.jpg', function(texture) {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        });
+
+    function initSky() {
+        sky = new Sky();
+        sky.scale.setScalar(450000);
+        scene.add(sky);
+
+        sun = new THREE.Vector3();
+
+        const effectController = {
+            turbidity: 10,
+            rayleigh: 2,
+            mieCoefficient: 0.005,
+            mieDirectionalG: 0.7,
+            elevation: 10,
+            azimuth: 0,
+            exposure: 0.9
+        };
+
+        const uniforms = sky.material.uniforms;
+        uniforms['turbidity'].value = effectController.turbidity;
+        uniforms['rayleigh'].value = effectController.rayleigh;
+        uniforms['mieCoefficient'].value = effectController.mieCoefficient;
+        uniforms['mieDirectionalG'].value = effectController.mieDirectionalG;
+
+        const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
+        const theta = THREE.MathUtils.degToRad(effectController.azimuth);
+
+        sun.setFromSphericalCoords(1, phi, theta);
+
+        uniforms['sunPosition'].value.copy(sun);
+
+        renderer.toneMappingExposure = effectController.exposure;
+        renderer.render(scene, camera);
+    } 
+
+    function addTrees() {
+        const loader = new GLTFLoader();
+        
+        loader.load(
+            '3Dmodels/pine_tree.glb',
+            function(gltf) {
+                for (let i = 0; i < 400; i++) {
+                    const tree = gltf.scene.clone();
+                    const side = (i % 2 === 0) ? -1 : 1;
+                    tree.position.set(side * (7 + Math.random() * 25), 0, -Math.random() * 300);
+
+                    const randomScaleY = Math.random() * (4.0 - 0.5) + 1;
+                    const randomRotationY = Math.random() * Math.PI * 2;
+
+                    tree.scale.set(2, randomScaleY, 2);
+                    tree.rotation.set(0, randomRotationY, 0);
+                    tree.castShadow = true;
+                    
+                    // Check and ensure materials support shadows
+                    tree.traverse(function(node) {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                            if (node.material) {
+                                node.material.shadowSide = THREE.FrontSide;
+                            }
+                        }
+                    });
+                    trees.push(tree);
+                    scene.add(tree);
+
+                }
+            },
+            undefined,
+            function(error) {
+                console.error('An error occurred while loading the model:', error);
+            }
+        );
+    }
+
+    function addGrass(){
+/////////
+// MESH
+/////////
+
+const instanceNumber = 250;
+const dummy = new THREE.Object3D();
+const riverWidth = 10; // Adjust this value to match your river's width
+const grassMargin = 10; // Distance from the river's edge where grass starts
+
+
+for (let i = 0; i < 1000; i++) {
+
+
+const geometry = new THREE.PlaneGeometry( 0.1, 1, 1, 4 );
+geometry.translate( 0, 0.5, 0 ); // move grass blade geometry lowest point at 0.
+
+const grass = new THREE.InstancedMesh( geometry, leavesMaterial, instanceNumber );
+
+const side = (i % 2 === 0) ? -1 : 1;
+const sideOffset = side * (riverWidth / 2 + grassMargin + Math.random() * 25);
+grass.position.set(sideOffset, 0, -Math.random() * 350);grass.position.set(side * (7 + Math.random() * 25), 0, -Math.random() * 350);
+
+grass.castShadow = true;
+grass.receiveShadow = true;
+grass.traverse(function(node) {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                            if (node.material) {
+                                node.material.shadowSide = THREE.FrontSide;
+                            }
+                        }
+                    });
+
+scene.add( grass );
+grasss.push(grass);
+
+     // Position and scale the grass blade instances randomly.
+     for (let j = 0; j < instanceNumber; j++) {
+            let xPos;
+            do {
+                xPos = (Math.random() - 0.5) * 10;
+            } while (Math.abs(xPos + sideOffset) < (riverWidth / 2 + grassMargin));
+
+            dummy.position.set(
+                xPos,
+                0,
+                (Math.random() - 0.5) * 10
+            );
+            
+            dummy.scale.setScalar(0.02 + Math.random() * 0.3);
+            
+            dummy.rotation.y = Math.random() * Math.PI;
+            
+            dummy.updateMatrix();
+            grass.setMatrixAt(j, dummy.matrix);
+        }
+
+        grass.instanceMatrix.needsUpdate = true;
+    }
+}
+
+
+    function addFishes() {
+    const loader3 = new GLTFLoader();
+    
+    loader3.load(
+        '3Dmodels/fish.glb',
+        function(gltf) {
+            for (let i = 0; i < 1; i++) {
+                const fish = gltf.scene.clone();
+                const lane = 0; // Always set lane to 0 for the middle lane
+                fish.position.set(lane * (5 + Math.random() * 5), 0, -Math.random() * 100);
+
+                fish.scale.set(0.2, 0.2, 0.2);
+                fish.position.y = -0.7;
+
+                const randomRotationY = Math.random() * Math.PI * 2;
+                fish.rotation.set(180, randomRotationY, 0);
+
+                fish.traverse(function(node) {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                            if (node.material) {
+                                node.material.shadowSide = THREE.FrontSide;
+                            }
+                        }
+                    });
+                                    fishes.push(fish);
+                scene.add(fish);
+            }
+        },
+        undefined,
+        function(error) {
+            console.error('An error occurred while loading the model:', error);
+        }
+    );
+}
+
+    let touchStartX = null;
+    let touchEndX = null;
+
+    function onTouchStart(event) {
+        touchStartX = event.touches[0].clientX;
+    }
+
+    function onTouchMove(event) {
+        touchEndX = event.touches[0].clientX;
+    }
+
+    function onTouchEnd() {
+        if (touchStartX && touchEndX) {
+            const deltaX = touchEndX - touchStartX;
+            if (deltaX > 50) {
+                turnAudio.play();
+                targetLane = Math.min(2, currentLane + 1);
+                //character.material = characterRightMaterial;
+            } else if (deltaX < -50) {
+                turnAudio.play();
+                targetLane = Math.max(0, currentLane - 1);
+                //character.material = characterLeftMaterial;
+            }
+            if (targetLane !== currentLane) {
+                isTransitioning = true;
+                smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
+                    currentLane = targetLane;
+                    isTransitioning = false;
+                    //character.material = characterStillMaterial;
+                });
+            }
+            updateCamera();
+        }
+        touchStartX = null;
+        touchEndX = null;
+        setTimeout(function() {
+            //character.material = characterStillMaterial;
+        }, 210);
+    }
+
+    function onKeyDown(event) {
+        if (isTransitioning) return;
+
+        if (event.key === 'ArrowLeft' || event.key === 'a') {
+            turnAudio.play();
+            targetLane = Math.max(0, currentLane - 1);
+            //character.material = characterLeftMaterial;
+        } else if (event.key === 'ArrowRight' || event.key === 'd') {
+            turnAudio.play();
+            targetLane = Math.min(2, currentLane + 1);
+            //character.material = characterRightMaterial;
+        } else if (event.key === 'p') {
+            togglePause(); // Pause/unpause the game with 'p' key
+        } else {
+            return;
+        }
+
+        if (targetLane !== currentLane) {
+            isTransitioning = true;
+            smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
+                currentLane = targetLane;
+                isTransitioning = false;
+                //character.material = characterStillMaterial;
+            });
+        }
+
+        updateCamera();
+        setTimeout(function() {
+            //character.material = characterStillMaterial;
+        }, 210);
+    }
+
+    
+    function smoothTransition(start, end, duration, callback) {
+        const startTime = Date.now();
+
+        function animate() {
+            const now = Date.now();
+            const elapsed = now - startTime;
+            const t = Math.min(elapsed / duration, 1);
+            character.position.x = start + (end - start) * t;
+
+            if (t < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                if (callback) callback();
+            }
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    function getRandomQuoteNumber() {
+        return Math.floor(Math.random() * 8) + 1;
+    }
+
+    function playRandomQuote() {
+        if (RandomQuote && !RandomQuote.paused) {
+            return;
+        }
+
+        setTimeout(function() {
+            QuoteNumber = getRandomQuoteNumber();
+            RandomQuote = document.getElementById('Quote' + QuoteNumber);
+            RandomQuote.play();
+        }, 2000);
+    }
+
+    function checkCollisions() {
+        for (let obstacle of obstacles) {
+            if (character.position.distanceTo(obstacle.position) < 1) {
+                hits++;
+                chances--;
+                document.getElementById('chances').innerText = chances;
+                totalPoints -= 10;
+
+                if (chances == 2) {
+                    document.getElementById('collisions').style.backgroundColor = 'rgba(236,255,0,0.5)';
+                    document.getElementById('collisions').style.color = 'black';
+                }
+                if (chances == 1) {
+                    document.getElementById('collisions').style.backgroundColor = 'rgba(255,125,0,0.5)';
+                    document.getElementById('collisions').style.color = 'black';
+                }
+                if (chances >= 3) {
+                    document.getElementById('collisions').style.backgroundColor = 'rgba(0,255,0,0.5)';
+                    document.getElementById('collisions').style.color = 'black';
+                }
+
+                collisionAudio.play();
+
+                obstacle.position.z -= 100;
+                triggerCameraShake(0.8);
+                if (hits >= 3) {
+                    backgroundAudio.pause();
+                    alert('Game Over!\nScore: ' + totalPoints + '\nTotal nuggets: ' + treasures + '\nPress OK to restart.');
+                    window.location.reload();
+                }
+            }
+        }
+
+        for (let nugget of nuggets) {
+            if (character.position.distanceTo(nugget.position) < 1) {
+                treasures++;
+                chances++;
+                hits--;
+                document.getElementById('chances').innerText = chances;
+                document.getElementById('treasuresFound').innerText = treasures;
+
+                if (chances == 2) {
+                    document.getElementById('collisions').style.backgroundColor = 'rgba(236,255,0,0.5)';
+                    document.getElementById('collisions').style.color = 'black';
+                }
+                if (chances == 1) {
+                    document.getElementById('collisions').style.backgroundColor = 'rgba(255,125,0,0.5)';
+                    document.getElementById('collisions').style.color = 'black';
+                }
+                if (chances >= 3) {
+                    document.getElementById('collisions').style.backgroundColor = 'rgba(0,255,0,0.5)';
+                    document.getElementById('collisions').style.color = 'black';
+                }
+                
+                nugget.position.z -= 100;
+                treasureAudio.play();
+                playRandomQuote();
+            }
+        }
+    }
+
+    function triggerCameraShake(duration) {
+        shakeDuration = duration;
+        shakeTime = 0;
+    }
+
+    function applyCameraShake() {
+        if (shakeTime < shakeDuration) {
+            const shakeAmount = 0.08;
+            camera.position.x += (Math.random() - 0.5) * shakeAmount;
+            camera.position.y += (Math.random() - 0.5) * shakeAmount;
+            shakeTime += speed;
+        } 
+    }
+
+    function updatePoints() {
+        totalPoints += 1;
+        document.getElementById('totalPoints').innerText = totalPoints;
+        IncreaseSpeed();
+    }
+
+    function IncreaseSpeed() {
+        if (totalPoints % 1000 === 0 && totalPoints > 0) {
+            speed = speed + 0.05;
+        }
+    }
+
+    function animateWater() {
+        const time = performance.now() * 0.001;
+        water.material.uniforms['time'].value += 1.0 / 60.0;
+        water.material.uniforms['size'].value = Math.sin(time) * 5.0 + 10.0;
+    }
+
+    function init() {
+        const backgroundAudio = document.getElementById('backgroundAudio');
+        const collisionAudio = document.getElementById('collisionAudio');
+        const treasureAudio = document.getElementById('treasureAudio');
+        const turnAudio = document.getElementById('turnAudio');
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+    const fillLight = new THREE.HemisphereLight(0x8dc1de, 0x00668d, 2);
+    fillLight.position.set(2, 1, 1);
+    scene.add(fillLight);
+
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    directionalLight.position.set(0, 400, -100); // Adjust the light position as needed
+    directionalLight.castShadow = true; 
+
+    directionalLight.shadow.mapSize.width = 300;
+    directionalLight.shadow.mapSize.height = 300;
+
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 500;
+    directionalLight.shadow.camera.left = -150;
+    directionalLight.shadow.camera.right = 150;
+    directionalLight.shadow.camera.top = 150;
+    directionalLight.shadow.camera.bottom = -150;
+    
+    directionalLight.shadow.radius = 2;
+    directionalLight.shadow.bias = -0.0001;
+
+    scene.add(directionalLight);
+
+
+/// Shaddow debut helper
+    //const helper = new THREE.CameraHelper(directionalLight.shadow.camera);
+    //scene.add(helper);
+
+
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = size;
+      canvas.height = size;
+
+      context.drawImage(heightMapImage.image, 0, 0, size, size);
+      const heightData = context.getImageData(0, 0, size, size).data;
+
+      const forestGeometry = new THREE.PlaneGeometry(300, 300, size - 1, size - 1);
+      for (let i = 0; i < forestGeometry.attributes.position.count; i++) {
+        const x = i % size;
+        const y = Math.floor(i / size);
+        const height = heightData[(y * size + x) * 4] / 255 * 50;
+        forestGeometry.attributes.position.setZ(i, height);
+      }
+      forestGeometry.computeVertexNormals();
+
+      const forestMaterial = new THREE.MeshStandardMaterial({ map: HeightMapTexture });
+      const forest = new THREE.Mesh(forestGeometry, forestMaterial);
+      forest.rotation.x = -Math.PI / 2;
+      forest.position.y = 0;
+
+      forest.receiveShadow = true;
+      forest.castShadow = true;
+
+      scene.add(forest);
+
+      window.forest = forest;
+
+
+        const waterGeometry = new THREE.PlaneGeometry(10, 300, 10, 300);
+
+        for (let i = 0; i < waterGeometry.attributes.position.count; i++) {
+            const x = waterGeometry.attributes.position.getX(i);
+            const y = waterGeometry.attributes.position.getY(i);
+            const noise = (Math.random() - 0.5) * 2;
+            if (x < 0) {
+                waterGeometry.attributes.position.setX(i, x - Math.abs(noise));
+            } else {
+                waterGeometry.attributes.position.setX(i, x + Math.abs(noise));
+            }
+        }
+
+        waterGeometry.attributes.position.needsUpdate = true;
+
+        water = new Water(waterGeometry, {
+            textureWidth: 512,
+            textureHeight: 512,
+            waterNormals: waterNormals,
+            alpha: 0.9,
+            scale: 4,
+            sunDirection: directionalLight.position.clone().normalize(),
+            waterColor: 0x007294,
+            distortionScale: 0.3,
+            flowDirection: new THREE.Vector2(1, 1)
+        });
+
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = 0.1;
+        water.receiveShadow = true;
+        scene.add(water);
+
+        addGrass();
+        addTrees();
+        addFishes();
+
+
+        addCharacter();
+
+        const loader = new GLTFLoader();
+        
+        loader.load(
+            '3Dmodels/rock.glb',
+            function(gltf) {
+                for (let i = 0; i < 15; i++) {
+                    const obstacle = gltf.scene.clone();
+                    const side = (i % 2 === 0) ? -1 : 1;
+                    obstacle.position.set(side * (5 + Math.random() * 5), 0, -Math.random() * 100);
+
+                    const randomScaleY = Math.random() * (0.4 - 0.1) + 0.1;
+                    const randomRotationY = Math.random() * Math.PI * 2;
+
+                    obstacle.scale.set(randomScaleY, randomScaleY, randomScaleY);
+                    obstacle.rotation.set(0, randomRotationY, 0);
+
+                    obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], 0, -10 - i * 10);
+                    obstacle.castShadow = true;
+
+                    obstacle.traverse(function(node) {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                            if (node.material) {
+                                node.material.shadowSide = THREE.FrontSide;
+                            }
+                        }
+                    });
+
+                    obstacles.push(obstacle);
+                    scene.add(obstacle);
+                }
+            },
+            undefined,
+            function(error) {
+                console.error('An error occurred while loading the model:', error);
+            }
+        );
+
+        const loader2 = new GLTFLoader();
+        
+        loader2.load(
+            '3Dmodels/gold_nugget.glb',
+            function(gltf) {
+                for (let i = 0; i < 1; i++) {
+                    const nugget = gltf.scene.clone();
+                    const side = (i % 2 === 0) ? -1 : 1;
+                    nugget.position.set(side * (5 + Math.random() * 5), 0, -Math.random() * 100);
+
+                    const randomScaleY = Math.random() * (15 - 15) + 5;
+                    const randomRotationY = Math.random() * Math.PI * 2;
+
+                    nugget.scale.set(randomScaleY, randomScaleY, randomScaleY);
+                    nugget.rotation.set(0, randomRotationY, 0);
+
+                    nugget.position.set(lanePositions[Math.floor(Math.random() * 3)], 1, -10 - i * 10);
+                    const time = performance.now() * 5;
+                    nugget.position.y = 0.1 + Math.sin(time) * 0;
+                    const newMaterial = new THREE.MeshPhongMaterial({ color: 0xFFE400 });
+                    nugget.material = newMaterial;
+                    nugget.castShadow = true;
+
+                    nugget.traverse(function(node) {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                            if (node.material) {
+                                node.material.shadowSide = THREE.FrontSide;
+                            }
+                        }
+                    });
+
+                    nuggets.push(nugget);
+                    scene.add(nugget);
+                }
+            },
+            undefined,
+            function(error) {
+                console.error('An error occurred while loading the model:', error);
+            }
+        );
+
+        document.addEventListener('keydown', onKeyDown);
+
+        document.addEventListener('touchstart', onTouchStart);
+        document.addEventListener('touchmove', onTouchMove);
+        document.addEventListener('touchend', onTouchEnd);
+
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.5;
+
+        initSky();
+
+        requestAnimationFrame(animate);
+    }
+
+function addCharacter(){
+    const loader4 = new GLTFLoader();
+
+    loader4.load(
+        '3Dmodels/Lumberjack_on_a_log.glb',
+        function (gltf) {
+            character = gltf.scene;
+            character.scale.set(0.5, 0.5, 0.5);
+
+            const box = new THREE.Box3().setFromObject(character);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+
+            characterBaseYOffset = CharacterInitialY - (center.y - size.y / 2) - SUBMERGE_AMOUNT; // Store this value
+
+            character.position.set(0, characterBaseYOffset, 0); // Set initial Y position
+            character.rotation.y = Math.PI;
+
+            character.traverse(function (node) { /* ... shadows ... */ });
+            scene.add(character);
+
+            // ... rest of your callback logic (camera.lookAt, animations, etc.)
+            // If animate() is called right after loading, ensure it's here
+            // animate(); // If animate() should only start after character is loaded
+        },
+        function (xhr) {
+            console.log((xhr.loaded / xhr.total * 100) + '% loaded for Lumberjack_on_a_log.glb');
+        },
+        function (error) {
+            console.error('An error occurred while loading Lumberjack_on_a_log.glb:', error);
+        }
+    );
+}
+
+    function updateCamera() {
+        const offset = new THREE.Vector3(0, 1, -2);
+        offset.applyQuaternion(character.quaternion);
+        camera.position.copy(character.position).add(offset);
+        camera.lookAt(character.position);
+        console.log("Value of the problematic variable:", character.quaternion);
+    }
+
+    function animate(currentTime) {
+        if (isPaused) return;
+        requestAnimationFrame(animate);
+
+        const time = performance.now() * 0.001;
+    if (character) {
+        // Apply the sine wave motion on top of the calculated base Y position
+        character.position.y = characterBaseYOffset + Math.sin(time) * 0.03;
+    }
+        const delta = currentTime - lastTime;
+        if (delta > interval) {
+            lastTime = currentTime - (delta % interval);
+
+            water.position.z += speed;
+            if (water.position.z > 10) water.position.z = 0;
+
+            water.material.uniforms['time'].value += 1.0 / 60.0;
+
+
+            window.forest.position.z += speed;
+           if (window.forest.position.z > 10) window.forest.position.z = 0;
+
+
+
+            for (let obstacle of obstacles) {
+                obstacle.position.z += speed;
+                if (obstacle.position.z > 10) {
+                    obstacle.position.z = -100;
+                    obstacle.position.x = lanePositions[Math.floor(Math.random() * 3)];
+                }
+            }
+
+            for (let nugget of nuggets) {
+                nugget.position.z += speed;
+                if (nugget.position.z > 10) {
+                    nugget.position.z = -100;
+                    nugget.position.x = lanePositions[Math.floor(Math.random() * 3)];
+                }
+            }
+            for (let tree of trees) {
+                tree.position.z += speed;
+                if (tree.position.z > 10) {
+                    tree.position.z = -100;
+                    tree.position.x = (tree.position.x < 0 ? -1 : 1) * (7 + Math.random() * 25);
+
+
+                }
+            }
+
+            for (let grass of grasss) {
+                grass.position.z += speed;
+                if (grass.position.z > 10) {
+                    grass.position.z = -100;
+                    grass.position.x = (grass.position.x < 0 ? -1 : 1) * (7 + Math.random() * 25);
+                }
+            }
+
+            for (let fish of fishes) {
+                // Variables for fish jumping animation
+                const fishJumpHeight = 2; // Adjust the height of the jump
+                const fishJumpDuration = 0.3; // Adjust the duration of the jump
+                const fishJumpFrequency = 0.01; // Adjust the frequency of jumping
+
+                fish.position.z += speed;
+                fish.userData.jumpTime = (fish.userData.jumpTime || 0) + fishJumpFrequency;
+
+                // Calculate the y position using a sine wave to simulate the jump
+                fish.position.y = Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * fishJumpHeight - 1;
+
+                // Calculate the rotation angle based on jumpTime
+                const rotationAngle = Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * Math.PI;
+
+                // Rotate the fish along the x-axis to simulate flipping
+                fish.rotation.x = rotationAngle;
+
+                // Reset the fish position and jump time when it moves past the view
+                if (fish.position.z > 10) {
+                    fish.position.z = -100;
+                    fish.position.x = lanePositions[Math.floor(Math.random() * 3)];
+                    fish.userData.jumpTime = 0;
+                    fish.rotation.x = 0; // Reset rotation
+                    fish.position.y = -1;
+                }
+            }
+
+            // Animate the grass    Hand a time variable to vertex shader for wind displacement.  
+            
+            leavesMaterial.uniforms.time.value = clock.getElapsedTime();
+            leavesMaterial.uniformsNeedUpdate = true;
+            
+            updatePoints();
+            updateCamera();
+            animateWater();
+
+            checkCollisions();
+            applyCameraShake();
+            scene.fog = new THREE.Fog(0xcccccc, 0, 200);
+
+            renderer.render(scene, camera);
+
+            const Announcement = document.getElementById('Announcement');
+            const dashboard = document.getElementById('dashboard');
+            const pauseButton = document.getElementById('pauseButton');
+            const countdown = document.getElementById('countdown');
+            countdown.innerText = 3;
+
+            let countdownValue = 3;
+            Announcement.style.display = 'none';
+
+            if(totalPoints == 10){
+                togglePause();
+                countdown.style.display = 'block';
+                dashboard.style.display = 'block';
+
+                const countdownInterval = setInterval(() => {
+                    pauseButton.style.display = 'block';
+                    countdown.innerText = countdownValue;
+                    countdownValue -= 1;
+                    if (countdownValue > 0) {
+                        countdown.innerText = countdownValue;
+                    } else {
+                        clearInterval(countdownInterval);
+                        countdown.style.display = 'none';
+                        togglePause();
+                        backgroundAudio.play();
+                    }
+                }, 1000);
+            }
+        }
+    }
+
+    window.startGame = function() {
+        init();
+    }
+
+    function togglePause() {
+        isPaused = !isPaused;
+        if (!isPaused) {
+            lastTime = performance.now();
+            requestAnimationFrame(animate);
+            backgroundAudio.play();
+            document.getElementById('pauseButton').innerText = "Pause";
+            document.getElementById('countdown').style.display = "none";
+        } else {
+            backgroundAudio.pause();
+            document.getElementById('pauseButton').innerText = "Resume";
+            if(totalPoints > 50){
+                document.getElementById('countdown').style.display = "block";
+                document.getElementById('countdown').style.cursor = "pointer";
+                document.getElementById('countdown').innerText = "Game Paused";
+                document.getElementById('countdown').onclick = togglePause;
+            }
+        }
+    }
+
+    document.getElementById('pauseButton').addEventListener('click', togglePause);
+</script>
+
+<div id="dashboard">
+    <div id="totalpointscontained"><span id="totalPoints">0</span></div>
+    <div id="collisions" style="vertical-align: middle;"><span id="chances">3</span></div>
+    <div id="nuggetscontained">
+        <img src="media/goldnugget.png" style="width:3vw; vertical-align: middle;">
+        <span id="treasuresFound" style="color:black; vertical-align: middle;">0</span>
+    </div>
+</div>
+
+<div id="pauseButton">Pause</div>
+<div id="countdown"></div>
+
+<div id="Announcement">
+    <img src="media/ridingonittitle.jpeg" style="max-height:50%;">
+    <h1>I'm Riding on it!</h1>
+    <div onclick="startGame()" style="padding:20px; background-color:gray; border-radius:5px;">
+        <span id="Menu" style="font-size:3vw; color:black; cursor:pointer;">Click here to Start the game</span>
+    </div>
+    <div style="margin-top:10px; font-size:1.5vw;">Let's ride on the river while avoiding the rocks, and collecting the gold nuggets!</div>
+    <div><a href="light.html">Click here if you need lower graphic for better game rending.</a></div>
+</div>
+</body>
+</html>
