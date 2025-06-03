@@ -103,15 +103,11 @@ import { Water } from 'three/addons/objects/Water.js';
 
     console.log("Script module parsing started. Version 13 (Full Integration Test).");
 
-    let scene, camera, renderer;
-    let character;
-    let sky, sun;
-    let water1, water2; // For dual plane water looping
-    let fillLight, directionalLight;
+    let scene, camera, renderer, character, sky, sun, water1, water2, fillLight, directionalLight, gltfLoader; // Consolidated and added gltfLoader
     let obstacles = [];
     let nuggets = [];
     let trees = [];
-    let fishes = [];
+    let fishes = []; // This remains
     let grasss = [];
     let forestMesh1, forestMesh2; // For dual plane terrain looping
     const forestLength = 600; // Length of one terrain/water segment
@@ -202,6 +198,75 @@ import { Water } from 'three/addons/objects/Water.js';
         console.log("Texture media/waternormals.jpg for water loaded successfully.");
     }, undefined, (err) => console.error("Error loading media/waternormals.jpg for water:", err));
 
+    const grassVertexShader = `
+      varying vec2 vUv;
+      uniform float time;
+      
+      ${simpleNoise} // Ensure simpleNoise is defined in this scope
+      
+        void main() {
+            vUv = uv;
+            float t = time * 2.;
+            
+            vec4 mvPosition = vec4( position, 1.0 );
+            #ifdef USE_INSTANCING
+                mvPosition = instanceMatrix * mvPosition;
+            #endif
+            
+            float noise = smoothNoise(mvPosition.xz * 0.5 + vec2(0., t));
+            noise = pow(noise * 0.5 + 0.5, 2.) * 2.;
+            
+            float dispPower = 1. - cos( uv.y * 3.1416 * 0.5 );
+            float displacement = noise * ( 0.3 * dispPower );
+            mvPosition.z -= displacement; 
+            
+            vec4 modelViewPosition = modelViewMatrix * mvPosition;
+            gl_Position = projectionMatrix * modelViewPosition;
+        }
+    `;
+
+    const grassFragmentShader = `
+      varying vec2 vUv;
+      
+      void main() {
+        vec3 baseColor = vec3( 0.41, 1.0, 0.5 ); 
+        float clarity = ( vUv.y * 0.875 ) + 0.125;
+        gl_FragColor = vec4( baseColor * clarity, 1 );
+      }
+    `;
+
+    const grassUniforms = {
+        time: { value: 0 }
+    };
+
+    const leavesMaterial = new THREE.ShaderMaterial({
+        vertexShader: grassVertexShader,
+        fragmentShader: grassFragmentShader,
+        uniforms: grassUniforms,
+        side: THREE.DoubleSide
+    });
+
+    function createSplashTexture() {
+       const canvas = document.createElement('canvas');
+       canvas.width = 64;
+       canvas.height = 64;
+       const context = canvas.getContext('2d');
+       
+       const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+       gradient.addColorStop(0, 'rgba(255,255,255,0.8)');
+       gradient.addColorStop(0.5, 'rgba(200,200,255,0.5)');
+       gradient.addColorStop(1, 'rgba(150,150,255,0)');
+       
+       context.fillStyle = gradient;
+       context.fillRect(0, 0, 64, 64);
+       
+       return new THREE.CanvasTexture(canvas);
+    }
+    const splashTexture = createSplashTexture();
+
+    let particlePool = [];
+    const maxParticles = 100; 
+    let particleSystemContainer; 
 
     function initSky() {
         console.log("initSky function called.");
@@ -225,9 +290,239 @@ import { Water } from 'three/addons/objects/Water.js';
         if(renderer) renderer.toneMappingExposure = effectController.exposure;
         console.log("Sky initialized and added to scene.");
     }
-    function addTrees() { console.log("addTrees function called (simplified).");}
-    function addGrass(){ console.log("addGrass function called (simplified).");}
-    function addFishes() { console.log("addFishes function called (simplified).");}
+    function addTrees() {
+        console.log("addTrees function called.");
+        if (!gltfLoader) {
+            console.error("gltfLoader not initialized in addTrees.");
+            return;
+        }
+        if (!character || !forestMesh1 || !forestMesh2) {
+            console.warn("Character or terrain not ready in addTrees, will retry or skip if necessary.");
+            // Attempt to add trees only if character and terrain are loaded
+            // This check might need to be more robust, e.g., by deferring or using a flag
+            if (!character) {
+                console.log("addTrees: Character not ready.");
+                return;
+            }
+            if(!forestMesh1 || !forestMesh2){
+                console.log("addTrees: Forest meshes not ready.");
+                return;
+            }
+        }
+
+        gltfLoader.load(
+            '3Dmodels/pine_tree.glb',
+            function(gltf) {
+                console.log("Pine tree model loaded.");
+                const treeModel = gltf.scene;
+                const numTrees = 100; // Number of trees for recycling pool
+
+                for (let i = 0; i < numTrees; i++) {
+                    const tree = treeModel.clone();
+                    const side = (i % 2 === 0) ? -1 : 1; // -1 for left, 1 for right
+                    const xPos = side * (7 + 5 + Math.random() * 60); 
+                    const zPos = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
+
+                    tree.position.set(
+                        xPos,
+                        forestMesh1.position.y + 0.01, 
+                        zPos
+                    );
+
+                    const randomScaleBase = 1.5 + Math.random() * 1.0; 
+                    const randomScaleY = randomScaleBase * (1.0 + Math.random() * 1.0); 
+                    tree.scale.set(randomScaleBase, randomScaleY, randomScaleBase);
+                    tree.rotation.y = Math.random() * Math.PI * 2;
+
+                    tree.traverse(function(node) {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true; 
+                        }
+                    });
+                    trees.push(tree);
+                    scene.add(tree);
+                }
+                console.log(trees.length + " trees added to scene.");
+            },
+            undefined,
+            function(error) {
+                console.error('An error occurred while loading the pine_tree.glb model:', error);
+            }
+        );
+    }
+    function addGrass() {
+        console.log("addGrass function called (Instanced Planar Grass).");
+        if (!character || !forestMesh1) {
+            console.warn("Character or terrain not ready in addGrass, deferring or skipping.");
+            return;
+        }
+
+        const bladeGeometry = new THREE.PlaneGeometry(0.1, 1, 1, 4); // A single grass blade
+        bladeGeometry.translate(0, 0.5, 0); // Pivot at base center
+
+        const totalPatches = 50; // Number of large grass patches
+        const instancesPerPatch = 150; // Number of blades per patch
+
+        const dummy = new THREE.Object3D(); // Used for instance transforms
+
+        for (let i = 0; i < totalPatches; i++) {
+            const patchMesh = new THREE.InstancedMesh(bladeGeometry, leavesMaterial, instancesPerPatch);
+            patchMesh.castShadow = false; // Individual blades don't cast shadows
+            patchMesh.receiveShadow = true;
+
+            const side = (i % 2 === 0) ? -1 : 1;
+            const patchX = side * (7 + 2 + Math.random() * 60); // River edge (7), margin (2), spread (60)
+            const patchZ = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
+            
+            patchMesh.position.set(
+                patchX,
+                forestMesh1.position.y + 0.01, // Align patch with terrain base
+                patchZ
+            );
+            scene.add(patchMesh);
+            grasss.push(patchMesh); // Add the whole patch (InstancedMesh) to grasss array
+
+            // Position and transform individual blades within this patch
+            for (let j = 0; j < instancesPerPatch; j++) {
+                dummy.position.set(
+                    (Math.random() - 0.5) * 5,  // Spread blades within a 5x5 area for the patch
+                    0, // Y is relative to patchMesh's position
+                    (Math.random() - 0.5) * 5
+                );
+                dummy.scale.setScalar(0.5 + Math.random() * 0.5);
+                dummy.rotation.y = Math.random() * Math.PI;
+                dummy.updateMatrix();
+                patchMesh.setMatrixAt(j, dummy.matrix);
+            }
+            patchMesh.instanceMatrix.needsUpdate = true;
+        }
+        console.log(grasss.length + " instanced grass patches added to scene.");
+    }
+    function addFishes() {
+        console.log("addFishes function called.");
+        // Ensure gltfLoader is initialized and available (now global)
+        if (!gltfLoader) {
+            console.error("addFishes: gltfLoader not initialized!");
+            return;
+        }
+        if (!character) {
+            console.warn("addFishes: Character not loaded yet, cannot determine initial Z position for fish. Skipping fish adding.");
+            return;
+        }
+
+        gltfLoader.load( 
+            '3Dmodels/fish.glb',
+            function(gltf) {
+                console.log("Fish model loaded.");
+                for (let i = 0; i < 5; i++) { // Create 5 fishes
+                    const fish = gltf.scene.clone();
+                    const laneIndex = Math.floor(Math.random() * lanePositions.length);
+                    fish.position.set(
+                        lanePositions[laneIndex] + (Math.random() - 0.5) * 1.5, // Randomize slightly within lane
+                        -0.7, // Initial Y position (underwater)
+                        character.position.z - 30 - Math.random() * 100 // Spread them out behind character
+                    );
+
+                    fish.scale.set(0.2, 0.2, 0.2);
+                    const randomRotationY = Math.random() * Math.PI * 2;
+                    fish.rotation.set(0, randomRotationY, 0); // Initial rotation, jump animation will control X
+
+                    fish.traverse(function(node) {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            // node.receiveShadow = true; // Less important for fish
+                        }
+                    });
+                    fishes.push(fish);
+                    scene.add(fish);
+                }
+                console.log(fishes.length + " fishes added to scene.");
+            },
+            undefined,
+            function(error) {
+                console.error('An error occurred while loading the fish.glb model:', error);
+            }
+        );
+    }
+
+    function initParticleSystem() {
+       particleSystemContainer = new THREE.Object3D();
+       scene.add(particleSystemContainer);
+
+       for (let i = 0; i < maxParticles; i++) {
+           const spriteMaterial = new THREE.SpriteMaterial({
+               map: splashTexture,
+               blending: THREE.AdditiveBlending, 
+               transparent: true,
+               opacity: 0.8,
+               sizeAttenuation: true
+           });
+           const particle = new THREE.Sprite(spriteMaterial);
+           particle.visible = false;
+           particle.scale.set(0.2, 0.2, 0.2); 
+           particleSystemContainer.add(particle);
+           particlePool.push({
+               sprite: particle,
+               isActive: false,
+               life: 0,
+               velocity: new THREE.Vector3(),
+               gravity: 0.02, 
+               initialScale: 0.2,
+               maxScale: 0.5,
+               scaleSpeed: 0.05
+           });
+       }
+    }
+
+    function emitSplash(position, count = 5, baseVelocity = 0.1) {
+       let emittedCount = 0;
+       for (let p of particlePool) {
+           if (!p.isActive) {
+               p.sprite.visible = true;
+               p.isActive = true;
+               p.life = 1.0 + Math.random() * 0.5; 
+               p.sprite.position.copy(position);
+               
+               const angle = Math.random() * Math.PI * 2;
+               const upwardSpeed = baseVelocity + Math.random() * baseVelocity;
+               p.velocity.set(
+                   Math.cos(angle) * baseVelocity * (0.5 + Math.random() * 0.5),
+                   upwardSpeed,
+                   Math.sin(angle) * baseVelocity * (0.5 + Math.random() * 0.5)
+               );
+               p.sprite.scale.set(p.initialScale, p.initialScale, p.initialScale);
+               p.sprite.material.opacity = 0.8;
+
+               emittedCount++;
+               if (emittedCount >= count) break;
+           }
+       }
+    }
+
+    function updateParticles(delta) { 
+       for (let p of particlePool) {
+           if (p.isActive) {
+               p.life -= delta * 2; 
+
+               if (p.life <= 0) {
+                   p.isActive = false;
+                   p.sprite.visible = false;
+               } else {
+                   p.sprite.position.addScaledVector(p.velocity, delta * 20); 
+                   p.velocity.y -= p.gravity * delta * 20; 
+
+                   const lifeRatio = Math.max(0, p.life / (1.0 + 0.5)); 
+                   p.sprite.material.opacity = Math.max(0, lifeRatio * 0.8);
+                   
+                   let currentScale = p.sprite.scale.x;
+                   currentScale += p.scaleSpeed * delta * 10;
+                   currentScale = Math.min(currentScale, p.maxScale);
+                   p.sprite.scale.set(currentScale, currentScale, currentScale);
+               }
+           }
+       }
+    }
 
     let touchStartX = null;
     let touchEndX = null;
@@ -257,6 +552,26 @@ import { Water } from 'three/addons/objects/Water.js';
             }
             if (targetLane !== currentLane && character) {
                 isTransitioning = true;
+                
+                const waterY = water1 ? water1.position.y : -0.15;
+                let splashSideOffset = 0.6; 
+                let splashPosition = new THREE.Vector3();
+
+                if (targetLane < currentLane) { 
+                    splashPosition.set(
+                        character.position.x + splashSideOffset, 
+                        waterY + 0.1, 
+                        character.position.z 
+                    );
+                } else { 
+                    splashPosition.set(
+                        character.position.x - splashSideOffset, 
+                        waterY + 0.1, 
+                        character.position.z
+                    );
+                }
+                emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03);
+
                 smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
                     currentLane = targetLane;
                     isTransitioning = false;
@@ -301,6 +616,26 @@ import { Water } from 'three/addons/objects/Water.js';
 
         if (targetLane !== currentLane && character) {
             isTransitioning = true;
+
+            const waterY = water1 ? water1.position.y : -0.15;
+            let splashSideOffset = 0.6; 
+            let splashPosition = new THREE.Vector3();
+
+            if (targetLane < currentLane) { 
+                splashPosition.set(
+                    character.position.x + splashSideOffset, 
+                    waterY + 0.1, 
+                    character.position.z
+                );
+            } else { 
+                splashPosition.set(
+                    character.position.x - splashSideOffset, 
+                    waterY + 0.1, 
+                    character.position.z
+                );
+            }
+            emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03);
+            
             smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
                 currentLane = targetLane; isTransitioning = false;
             });
@@ -518,6 +853,30 @@ import { Water } from 'three/addons/objects/Water.js';
         console.log("Attempting to add water planes. Water Normals loaded:", waterNormals && waterNormals.image && waterNormals.image.complete);
         if (Water && waterNormals && waterNormals.image && waterNormals.image.complete && waterNormals.image.naturalHeight !== 0) {
             const waterPlaneGeometry = new THREE.PlaneGeometry(14, waterLength, 10, 50);
+
+            // Apply Vertex Displacement for uneven river sides (Increased factor)
+            const widthSegments = waterPlaneGeometry.parameters.widthSegments; // Should be 10
+            const depthSegments = waterPlaneGeometry.parameters.depthSegments; // Should be 50
+
+            console.log("Applying uneven river side modifications to waterPlaneGeometry...");
+
+            for (let j = 0; j <= depthSegments; j++) { // Iterate along the length of the river (Y-axis of the geometry)
+                // Left edge vertex (local -X side of the plane)
+                const leftEdgeIndex = j * (widthSegments + 1);
+                let xLeft = positions.getX(leftEdgeIndex);
+                xLeft += (Math.random() - 0.5) * 2.5; // Increased magnitude significantly
+                positions.setX(leftEdgeIndex, xLeft);
+
+                // Right edge vertex (local +X side of the plane)
+                const rightEdgeIndex = j * (widthSegments + 1) + widthSegments;
+                let xRight = positions.getX(rightEdgeIndex);
+                xRight += (Math.random() - 0.5) * 2.5; // Increased magnitude significantly
+                positions.setX(rightEdgeIndex, xRight);
+            }
+            positions.needsUpdate = true;
+            waterPlaneGeometry.computeVertexNormals(); // Recalculate normals
+            console.log("WaterPlaneGeometry modification complete. NeedsUpdate and computeVertexNormals called.");
+
             let sunDir = new THREE.Vector3(0,1,0);
             if (sky && sky.material.uniforms.sunPosition) {
                 sunDir.copy(sky.material.uniforms.sunPosition.value);
@@ -560,15 +919,18 @@ import { Water } from 'three/addons/objects/Water.js';
             console.warn(logMessage);
         }
 
-        addCharacter();
-        addTrees(); addGrass(); addFishes();
-
+        // Initialize global GLTFLoader
         const dracoLoader = new DRACOLoader(manager);
         dracoLoader.setDecoderPath( 'three/addons/loaders/draco/' );
-        const gltfLoader = new GLTFLoader(manager);
+        gltfLoader = new GLTFLoader(manager); // Assign to global gltfLoader
         gltfLoader.setDRACOLoader( dracoLoader );
+            
+        // Call addCharacter. Trees, grass, fish will be called from its callback.
+        addCharacter(); 
 
-        gltfLoader.load('3Dmodels/rock.glb', (gltf) => {
+        initParticleSystem(); // Initialize particle system
+
+        gltfLoader.load('3Dmodels/rock.glb', (gltf) => { // Uses global gltfLoader
             console.log("Rock model loaded.");
             for (let i = 0; i < 15; i++) {
                 const obstacle = gltf.scene.clone();
@@ -605,14 +967,14 @@ import { Water } from 'three/addons/objects/Water.js';
         console.log("init function completed.");
     }
 
-    function addCharacter(){
+    function addCharacter(){ // Now uses the global gltfLoader
         console.log("addCharacter function called.");
-        const dracoLoader = new DRACOLoader(manager);
-        dracoLoader.setDecoderPath( 'three/addons/loaders/draco/' );
-        const loader4 = new GLTFLoader(manager);
-        loader4.setDRACOLoader( dracoLoader );
-        loader4.load('3Dmodels/Lumberjack_on_a_log.glb', function (gltf) {
-                console.log("Lumberjack_on_a_log.glb loaded.");
+        // const dracoLoader = new DRACOLoader(manager); // Removed, use global
+        // dracoLoader.setDecoderPath( 'three/addons/loaders/draco/' ); // Removed
+        // const loader4 = new GLTFLoader(manager); // Removed, use global
+        // loader4.setDRACOLoader( dracoLoader ); // Removed
+        gltfLoader.load('3Dmodels/Lumberjack_on_a_log.glb', function (gltf) { // Use global gltfLoader
+                console.log("Lumberjack_on_a_log.glb loaded successfully in addCharacter.");
                 character = gltf.scene;
                 character.scale.set(0.4, 0.4, 0.4);
                 const box = new THREE.Box3().setFromObject(character);
@@ -623,8 +985,18 @@ import { Water } from 'three/addons/objects/Water.js';
                 character.rotation.y = Math.PI;
                 character.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; }});
                 scene.add(character);
-                targetLane = currentLane;
-                console.log("Character added. BaseYOffset:", characterBaseYOffset, "Final Y:", character.position.y);
+                targetLane = currentLane; // Initialize targetLane based on currentLane
+                console.log("Character added to scene. BaseYOffset:", characterBaseYOffset, "Final Y:", character.position.y);
+
+                // NOW, CALL DEPENDENT FUNCTIONS
+                console.log("Character loaded, now calling addTrees, addGrass, addFishes.");
+                if (forestMesh1 && forestMesh2) { // Ensure terrain is ready
+                    addTrees();
+                    addGrass();
+                } else {
+                    console.error("Terrain meshes not ready when trying to add trees/grass after character load.");
+                }
+                addFishes(); // Fishes depend on character position primarily
             },
             xhr => console.log('Lumberjack model ' + (xhr.loaded / xhr.total * 100) + '% loaded'),
             err => console.error('Error loading Lumberjack_on_a_log.glb:', err)
@@ -705,6 +1077,122 @@ import { Water } from 'three/addons/objects/Water.js';
                 } else if (!character && nugget.position.z > 20) {
                     nugget.position.z = -130 - Math.random() * 100;
                     nugget.position.x = lanePositions[Math.floor(Math.random() * 3)];
+                }
+            }
+
+            // Fish animation
+            for (let fish of fishes) {
+                const fishJumpHeight = 0.8; 
+                const fishJumpDuration = 0.6; 
+                const fishJumpFrequency = 0.02; 
+
+                fish.position.z += speed; 
+
+                if (fish.userData === undefined) fish.userData = {};
+                fish.userData.jumpTime = (fish.userData.jumpTime || 0) + fishJumpFrequency;
+
+                fish.position.y = -0.7 + Math.max(0, Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * fishJumpHeight);
+
+                const rotationAngle = Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * Math.PI;
+                fish.rotation.x = rotationAngle;
+
+                if (character && fish.position.z > character.position.z + 20) {
+                    const laneIndex = Math.floor(Math.random() * lanePositions.length);
+                    fish.position.set(
+                        lanePositions[laneIndex] + (Math.random() - 0.5) * 1.5,
+                        -0.7, 
+                        character.position.z - 130 - Math.random() * 100 
+                    );
+                    fish.userData.jumpTime = 0;
+                    fish.rotation.x = 0; 
+                } else if (!character && fish.position.z > 20) { 
+                     fish.position.set(
+                        lanePositions[Math.floor(Math.random() * 3)] + (Math.random() - 0.5) * 1.5,
+                        -0.7,
+                        -130 - Math.random() * 100
+                    );
+                    fish.userData.jumpTime = 0;
+                    fish.rotation.x = 0;
+                }
+            }
+
+            // Tree recycling
+            for (let tree of trees) {
+                tree.position.z += speed; // Trees move with the terrain/water
+
+                // If a tree moves past the character's view plus half a forest segment, recycle it
+                if (character && tree.position.z > character.position.z + (forestLength / 2) + 20) {
+                    const side = (Math.random() < 0.5) ? -1 : 1;
+                    tree.position.x = side * (7 + 5 + Math.random() * 60);
+                    // Recycle to the back, behind the second terrain segment, relative to character.
+                    tree.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
+
+                    const randomScaleBase = 1.5 + Math.random() * 1.0;
+                    const randomScaleY = randomScaleBase * (1.0 + Math.random() * 1.0);
+                    tree.scale.set(randomScaleBase, randomScaleY, randomScaleBase);
+                    tree.rotation.y = Math.random() * Math.PI * 2;
+                } else if (!character && tree.position.z > (forestLength / 2) + 20) { // Fallback if character not loaded
+                    const side = (Math.random() < 0.5) ? -1 : 1;
+                    tree.position.x = side * (7 + 5 + Math.random() * 60);
+                    tree.position.z = -(forestLength / 2) - Math.random() * (forestLength/2);
+                }
+            }
+
+            // Grass recycling & animation update
+            if (leavesMaterial && leavesMaterial.uniforms && leavesMaterial.uniforms.time) {
+                leavesMaterial.uniforms.time.value = clock.getElapsedTime();
+            }
+
+            for (let grassPatch of grasss) { // Now grasss contains InstancedMesh objects
+                grassPatch.position.z += speed;
+
+                if (character && grassPatch.position.z > character.position.z + (forestLength / 2) + 20) {
+                    const side = (Math.random() < 0.5) ? -1 : 1;
+                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); // Matches new addGrass
+                    grassPatch.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
+                    // Individual blade matrices within the patch are not re-randomized upon recycling the patch itself.
+                } else if (!character && grassPatch.position.z > (forestLength / 2) + 20) { // Fallback
+                    const side = (Math.random() < 0.5) ? -1 : 1;
+                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); // Matches new addGrass
+                    grassPatch.position.z = -(forestLength / 2) - Math.random() * (forestLength / 2);
+                }
+            }
+
+            updateParticles(1/fps); // Update all active particles
+
+            // Rock splash triggering logic
+            const waterY = water1 ? water1.position.y : -0.15; 
+
+            for (let obstacle of obstacles) {
+                if (character && Math.abs(obstacle.position.z - character.position.z) < 30 && obstacle.position.z < character.position.z) {
+                    if (Math.abs(obstacle.position.y - waterY) < 0.2) { 
+                        obstacle.userData = obstacle.userData || {};
+                        const now = performance.now();
+                        if (!obstacle.userData.lastSplashTime || (now - obstacle.userData.lastSplashTime > 500 + Math.random() * 500)) { 
+                            const splashPos = new THREE.Vector3(obstacle.position.x, waterY + 0.1, obstacle.position.z);
+                            emitSplash(splashPos, 3 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.05); 
+                            obstacle.userData.lastSplashTime = now;
+                       }
+                   }
+               }
+            }
+
+            // Continuous forward splash (wake)
+            if (character && speed > 0.05 && animationLoopStarted && !isPaused) { 
+                character.userData = character.userData || {};
+                const now = performance.now();
+                const wakeCooldown = 150 + Math.random() * 100; 
+
+                if (!character.userData.lastWakeSplashTime || (now - character.userData.lastWakeSplashTime > wakeCooldown)) {
+                    const waterYWake = water1 ? water1.position.y : -0.15;
+                    const frontSplashPosition = new THREE.Vector3(
+                        character.position.x, 
+                        waterYWake + 0.05, 
+                        character.position.z - 0.5 
+                    );
+                    emitSplash(frontSplashPosition, 1 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02); 
+
+                    character.userData.lastWakeSplashTime = now;
                 }
             }
 
