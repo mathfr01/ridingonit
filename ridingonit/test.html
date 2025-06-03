@@ -938,55 +938,33 @@ import { Water } from 'three/addons/objects/Water.js';
 
             // For water1
             const leftBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
-            // const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20); // Commented out for debug
-            // modifyBankVertices(leftBank1Geometry, true); // Commented out for debug
-            // modifyBankVertices(rightBank1Geometry, false); // Commented out for debug
+            const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            modifyBankVertices(leftBank1Geometry, true); // true for left bank
+            modifyBankVertices(rightBank1Geometry, false); // false for right bank
             const leftBank1 = new THREE.Mesh(leftBank1Geometry, bankMaterial);
-            // const rightBank1 = new THREE.Mesh(rightBank1Geometry, bankMaterial); // Commented out for debug
+            const rightBank1 = new THREE.Mesh(rightBank1Geometry, bankMaterial);
             leftBank1.rotation.x = -Math.PI / 2;
             leftBank1.position.set(-6, water1.position.y - 0.05, water1.position.z);
-            // rightBank1.rotation.x = -Math.PI / 2; // Commented out for debug
-            // rightBank1.position.set(6, water1.position.y - 0.05, water1.position.z); // Commented out for debug
-            leftBank1.receiveShadow = true; 
-            // rightBank1.receiveShadow = true; // Commented out for debug
-            scene.add(leftBank1); 
-            // scene.add(rightBank1); // Commented out for debug
-            leftBankMeshes.push(leftBank1); 
-            // rightBankMeshes.push(rightBank1); // Commented out for debug
+            rightBank1.rotation.x = -Math.PI / 2;
+            rightBank1.position.set(6, water1.position.y - 0.05, water1.position.z);
+            leftBank1.receiveShadow = true; rightBank1.receiveShadow = true;
+            scene.add(leftBank1); scene.add(rightBank1);
+            leftBankMeshes.push(leftBank1); rightBankMeshes.push(rightBank1);
 
-            if (leftBank1) { 
-                console.log("LeftBank1 BEFORE EXTREME MOD - Vertex 0 Local Z:", leftBank1.geometry.attributes.position.getZ(0));
-                
-                const tempVec = new THREE.Vector3();
-                tempVec.fromBufferAttribute(leftBank1.geometry.attributes.position, 0); // Corrected
-                leftBank1.localToWorld(tempVec); 
-                console.log("LeftBank1 BEFORE EXTREME MOD - Vertex 0 World Y:", tempVec.y);
-
-                leftBank1.geometry.attributes.position.setZ(0, 50.0); 
-                leftBank1.geometry.attributes.position.needsUpdate = true;
-                leftBank1.geometry.computeVertexNormals(); 
-
-                console.log("LeftBank1 AFTER EXTREME MOD - Vertex 0 Local Z:", leftBank1.geometry.attributes.position.getZ(0));
-                
-                tempVec.fromBufferAttribute(leftBank1.geometry.attributes.position, 0); // Corrected
-                leftBank1.localToWorld(tempVec); 
-                console.log("LeftBank1 AFTER EXTREME MOD - Vertex 0 World Y:", tempVec.y);
-            }
-
-            // For water2 (All Commented out for debug)
-            // const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
-            // const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
-            // modifyBankVertices(leftBank2Geometry, true);
-            // modifyBankVertices(rightBank2Geometry, false);
-            // const leftBank2 = new THREE.Mesh(leftBank2Geometry, bankMaterial);
-            // const rightBank2 = new THREE.Mesh(rightBank2Geometry, bankMaterial);
-            // leftBank2.rotation.x = -Math.PI / 2;
-            // leftBank2.position.set(-6, water2.position.y - 0.05, water2.position.z);
-            // rightBank2.rotation.x = -Math.PI / 2;
-            // rightBank2.position.set(6, water2.position.y - 0.05, water2.position.z);
-            // leftBank2.receiveShadow = true; rightBank2.receiveShadow = true;
-            // scene.add(leftBank2); scene.add(rightBank2);
-            // leftBankMeshes.push(leftBank2); rightBankMeshes.push(rightBank2);
+            // For water2
+            const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            modifyBankVertices(leftBank2Geometry, true);
+            modifyBankVertices(rightBank2Geometry, false);
+            const leftBank2 = new THREE.Mesh(leftBank2Geometry, bankMaterial);
+            const rightBank2 = new THREE.Mesh(rightBank2Geometry, bankMaterial);
+            leftBank2.rotation.x = -Math.PI / 2;
+            leftBank2.position.set(-6, water2.position.y - 0.05, water2.position.z);
+            rightBank2.rotation.x = -Math.PI / 2;
+            rightBank2.position.set(6, water2.position.y - 0.05, water2.position.z);
+            leftBank2.receiveShadow = true; rightBank2.receiveShadow = true;
+            scene.add(leftBank2); scene.add(rightBank2);
+            leftBankMeshes.push(leftBank2); rightBankMeshes.push(rightBank2);
         } else {
             let logMessage = "Water not created. Reasons: ";
             if (!Water) logMessage += "Water class not found. ";
@@ -1140,19 +1118,13 @@ import { Water } from 'three/addons/objects/Water.js';
                 }
             }
 
-            // Update bank positions to follow water (Simplified for debugging leftBank1)
-            if (leftBankMeshes[0] && water1) {
+            // Update bank positions to follow water
+            if (leftBankMeshes.length >= 2 && rightBankMeshes.length >=2 && water1 && water2) {
                 leftBankMeshes[0].position.z = water1.position.z;
+                rightBankMeshes[0].position.z = water1.position.z;
+                leftBankMeshes[1].position.z = water2.position.z;
+                rightBankMeshes[1].position.z = water2.position.z;
             }
-            // if (rightBankMeshes[0] && water1) { // Comment out right bank update
-            //     rightBankMeshes[0].position.z = water1.position.z;
-            // }
-            // if (leftBankMeshes[1] && water2) { // Comment out second set update
-            //     leftBankMeshes[1].position.z = water2.position.z;
-            // }
-            // if (rightBankMeshes[1] && water2) { // Comment out second set update
-            //     rightBankMeshes[1].position.z = water2.position.z;
-            // }
 
             for (let obstacle of obstacles) {
                  obstacle.position.z += speed;
@@ -1275,8 +1247,8 @@ import { Water } from 'three/addons/objects/Water.js';
                         obstacle.userData = obstacle.userData || {};
                         const now = performance.now();
                         if (!obstacle.userData.lastSplashTime || (now - obstacle.userData.lastSplashTime > 500 + Math.random() * 500)) { 
-                            const splashPos = new THREE.Vector3(obstacle.position.x, waterY + 0.1, obstacle.position.z - 0.35);
-                            emitSplash(splashPos, 4 + Math.floor(Math.random() * 2), 0.055 + Math.random()*0.05); 
+                            const splashPos = new THREE.Vector3(obstacle.position.x, waterY + 0.1, obstacle.position.z - 0.1);
+                            emitSplash(splashPos, 3 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.05); 
                             obstacle.userData.lastSplashTime = now;
                        }
                    }
@@ -1300,27 +1272,6 @@ import { Water } from 'three/addons/objects/Water.js';
 
                     character.userData.lastWakeSplashTime = now;
                 }
-            }
-            \/\/ Continuous rear wake for character\
-            if (character && speed > 0.03 && animationLoopStarted && !isPaused) {\
-                character.userData = character.userData || {}; \
-                const now = performance.now();\
-                const rearWakeCooldown = 200 + Math.random() * 150; \
-\
-                if (!character.userData.lastRearWakeSplashTime || (now - character.userData.lastRearWakeSplashTime > rearWakeCooldown)) {\
-                    const waterSurfaceY = water1 ? water1.position.y : -0.15; \/\/ Get current water level\
-                    const rearWakePosition = new THREE.Vector3(\
-                        character.position.x + (Math.random() - 0.5) * 0.4, \/\/ Slight sideways spread\
-                        waterSurfaceY + 0.05, \/\/ Slightly above water surface\
-                        character.position.z + 0.6 \/\/ Positioned behind the character's center (log is ~1 unit, Z is positive "behind")\
-                    );\
-                    \/\/ Using existing emitSplash; parameters: count=1 or 2, baseVelocity=0.015 to 0.025\
-                    emitSplash(rearWakePosition, 1 + Math.floor(Math.random() * 2), 0.015 + Math.random()*0.01); \
-                    );\
-                    \/\/ Using existing emitSplash; parameters: count=1-2, baseVelocity=0.015-0.025\
-                    emitSplash(rearWakePosition, 1 + Math.floor(Math.random() * 2), 0.015 + Math.random()*0.01); \
-                    character.userData.lastRearWakeSplashTime = now;\
-                }\
             }
 
             updatePoints();
