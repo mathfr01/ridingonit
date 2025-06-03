@@ -291,14 +291,14 @@ import { Water } from 'three/addons/objects/Water.js';
 
                   if (isOuterEdgeVertex) {
                       // Modify local Z for height variation (this becomes world Y after rotation)
-                      let currentLocalZ = positions.getZ(index); // Should be 0 for a new PlaneGeometry
-                      currentLocalZ += (Math.random() - 0.5) * 1.5; // MODIFIED: Vary height by +/- 0.75 units
+                      let currentLocalZ = positions.getZ(index); 
+                      currentLocalZ += (Math.random() - 0.5) * 2.5; // INCREASED AMPLITUDE
                       positions.setZ(index, currentLocalZ);
 
                       // Modify local X for jaggedness along the river bank edge
                       let currentLocalX = positions.getX(index);
-                      // MODIFIED: Apply sinusoidal variation combined with randomness for a more natural look
-                      currentLocalX += Math.sin(j * 0.5) * 0.2 + (Math.random() - 0.5) * 0.2; 
+                      // Using 'j' (loop variable for length segments) for smoother, wave-like variation along the bank
+                      currentLocalX += Math.sin(j * 0.2) * 0.5 + (Math.random() - 0.5) * 0.4; // INCREASED AMPLITUDE & ADJUSTED SINE
                       positions.setX(index, currentLocalX);
                   }
               }
@@ -338,8 +338,6 @@ import { Water } from 'three/addons/objects/Water.js';
         }
         if (!character || !forestMesh1 || !forestMesh2) {
             console.warn("Character or terrain not ready in addTrees, will retry or skip if necessary.");
-            // Attempt to add trees only if character and terrain are loaded
-            // This check might need to be more robust, e.g., by deferring or using a flag
             if (!character) {
                 console.log("addTrees: Character not ready.");
                 return;
@@ -355,11 +353,11 @@ import { Water } from 'three/addons/objects/Water.js';
             function(gltf) {
                 console.log("Pine tree model loaded.");
                 const treeModel = gltf.scene;
-                const numTrees = 100; // Number of trees for recycling pool
+                const numTrees = 100; 
 
                 for (let i = 0; i < numTrees; i++) {
                     const tree = treeModel.clone();
-                    const side = (i % 2 === 0) ? -1 : 1; // -1 for left, 1 for right
+                    const side = (i % 2 === 0) ? -1 : 1; 
                     const xPos = side * (5 + 1 + Math.random() * 15); 
                     const zPos = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
 
@@ -398,36 +396,35 @@ import { Water } from 'three/addons/objects/Water.js';
             return;
         }
 
-        const bladeGeometry = new THREE.PlaneGeometry(0.1, 1, 1, 4); // A single grass blade
-        bladeGeometry.translate(0, 0.5, 0); // Pivot at base center
+        const bladeGeometry = new THREE.PlaneGeometry(0.1, 1, 1, 4); 
+        bladeGeometry.translate(0, 0.5, 0); 
 
-        const totalPatches = 50; // Number of large grass patches
-        const instancesPerPatch = 150; // Number of blades per patch
+        const totalPatches = 50; 
+        const instancesPerPatch = 150; 
 
-        const dummy = new THREE.Object3D(); // Used for instance transforms
+        const dummy = new THREE.Object3D(); 
 
         for (let i = 0; i < totalPatches; i++) {
             const patchMesh = new THREE.InstancedMesh(bladeGeometry, leavesMaterial, instancesPerPatch);
-            patchMesh.castShadow = false; // Individual blades don't cast shadows
+            patchMesh.castShadow = false; 
             patchMesh.receiveShadow = true;
 
             const side = (i % 2 === 0) ? -1 : 1;
-            const patchX = side * (5 + 0.5 + Math.random() * 10); // River edge (7), margin (2), spread (60)
+            const patchX = side * (5 + 0.5 + Math.random() * 10); 
             const patchZ = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
             
             patchMesh.position.set(
                 patchX,
-                forestMesh1.position.y + 0.01, // Align patch with terrain base
+                forestMesh1.position.y + 0.01, 
                 patchZ
             );
             scene.add(patchMesh);
-            grasss.push(patchMesh); // Add the whole patch (InstancedMesh) to grasss array
+            grasss.push(patchMesh); 
 
-            // Position and transform individual blades within this patch
             for (let j = 0; j < instancesPerPatch; j++) {
                 dummy.position.set(
-                    (Math.random() - 0.5) * 5,  // Spread blades within a 5x5 area for the patch
-                    0, // Y is relative to patchMesh's position
+                    (Math.random() - 0.5) * 5,  
+                    0, 
                     (Math.random() - 0.5) * 5
                 );
                 dummy.scale.setScalar(0.5 + Math.random() * 0.5);
@@ -441,7 +438,6 @@ import { Water } from 'three/addons/objects/Water.js';
     }
     function addFishes() {
         console.log("addFishes function called.");
-        // Ensure gltfLoader is initialized and available (now global)
         if (!gltfLoader) {
             console.error("addFishes: gltfLoader not initialized!");
             return;
@@ -455,23 +451,22 @@ import { Water } from 'three/addons/objects/Water.js';
             '3Dmodels/fish.glb',
             function(gltf) {
                 console.log("Fish model loaded.");
-                for (let i = 0; i < 5; i++) { // Create 5 fishes
+                for (let i = 0; i < 5; i++) { 
                     const fish = gltf.scene.clone();
                     const laneIndex = Math.floor(Math.random() * lanePositions.length);
                     fish.position.set(
-                        lanePositions[laneIndex] + (Math.random() - 0.5) * 1.5, // Randomize slightly within lane
-                        -0.7, // Initial Y position (underwater)
-                        character.position.z - 30 - Math.random() * 100 // Spread them out behind character
+                        lanePositions[laneIndex] + (Math.random() - 0.5) * 1.5, 
+                        -0.7, 
+                        character.position.z - 30 - Math.random() * 100 
                     );
 
                     fish.scale.set(0.2, 0.2, 0.2);
                     const randomRotationY = Math.random() * Math.PI * 2;
-                    fish.rotation.set(0, randomRotationY, 0); // Initial rotation, jump animation will control X
+                    fish.rotation.set(0, randomRotationY, 0); 
 
                     fish.traverse(function(node) {
                         if (node.isMesh) {
                             node.castShadow = true;
-                            // node.receiveShadow = true; // Less important for fish
                         }
                     });
                     fishes.push(fish);
@@ -515,7 +510,7 @@ import { Water } from 'three/addons/objects/Water.js';
        }
     }
 
-    function emitSplash(position, count = 5, baseVelocity = 0.1) {
+    function emitSplash(position, count = 5, baseVelocity = 0.1, angleOffset = 0, speedMultiplier = 1.0, upwardSpeedBias = 1.0) {
        let emittedCount = 0;
        for (let p of particlePool) {
            if (!p.isActive) {
@@ -524,12 +519,15 @@ import { Water } from 'three/addons/objects/Water.js';
                p.life = 1.0 + Math.random() * 0.5; 
                p.sprite.position.copy(position);
                
-               const angle = Math.random() * Math.PI * 2;
-               const upwardSpeed = baseVelocity + Math.random() * baseVelocity;
+               const randomAngleComponent = (Math.random() - 0.5) * (Math.PI / 4); // Spread
+               const finalAngle = angleOffset + randomAngleComponent;
+               const effectiveBaseVelocity = baseVelocity * speedMultiplier;
+               const upwardSpeed = (baseVelocity + Math.random() * baseVelocity) * upwardSpeedBias; // Apply bias
+
                p.velocity.set(
-                   Math.cos(angle) * baseVelocity * (0.5 + Math.random() * 0.5),
+                   Math.cos(finalAngle) * effectiveBaseVelocity * (0.5 + Math.random() * 0.5),
                    upwardSpeed,
-                   Math.sin(angle) * baseVelocity * (0.5 + Math.random() * 0.5)
+                   Math.sin(finalAngle) * effectiveBaseVelocity * (0.5 + Math.random() * 0.5)
                );
                p.sprite.scale.set(p.initialScale, p.initialScale, p.initialScale);
                p.sprite.material.opacity = 0.8;
@@ -610,7 +608,7 @@ import { Water } from 'three/addons/objects/Water.js';
                         character.position.z
                     );
                 }
-                emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03);
+                emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0);
 
                 smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
                     currentLane = targetLane;
@@ -674,7 +672,7 @@ import { Water } from 'three/addons/objects/Water.js';
                     character.position.z
                 );
             }
-            emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03);
+            emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0);
             
             smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
                 currentLane = targetLane; isTransitioning = false;
@@ -702,7 +700,7 @@ import { Water } from 'three/addons/objects/Water.js';
     function getRandomQuoteNumber() { return Math.floor(Math.random() * 8) + 1; }
 
     function playRandomQuote() {
-        if (RandomQuote && !RandomQuote.paused && RandomQuote.currentTime > 0 && RandomQuote.duration > 0 && RandomQuote.currentTime < RandomQuote.duration - 0.1) { // Check if ended or very close to end
+        if (RandomQuote && !RandomQuote.paused && RandomQuote.currentTime > 0 && RandomQuote.duration > 0 && RandomQuote.currentTime < RandomQuote.duration - 0.1) { 
             console.log("A quote is already playing.");
             return;
         }
@@ -710,7 +708,7 @@ import { Water } from 'three/addons/objects/Water.js';
         RandomQuote = document.getElementById('Quote' + QuoteNumber);
         if (RandomQuote) {
             console.log("Playing quote: ", QuoteNumber);
-            RandomQuote.currentTime = 0; // Ensure it plays from the start
+            RandomQuote.currentTime = 0; 
             RandomQuote.play().catch(e => console.warn("Quote audio play failed:", e));
         } else {
             console.warn("Could not find Quote audio element for number:", QuoteNumber);
@@ -758,7 +756,6 @@ import { Water } from 'three/addons/objects/Water.js';
         const treasuresFoundEl = document.getElementById('treasuresFound');
         const collisionsDiv = document.getElementById('collisions');
 
-        // Obstacle collisions
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obstacle = obstacles[i];
             if (character.position.distanceTo(obstacle.position) < 0.65) {
@@ -791,10 +788,9 @@ import { Water } from 'three/addons/objects/Water.js';
             }
         }
 
-        // Nugget collisions
         for (let i = nuggets.length - 1; i >= 0; i--) {
             const nugget = nuggets[i];
-            if (character.position.distanceTo(nugget.position) < 0.7) { // Adjusted nugget collision radius if needed due to scale
+            if (character.position.distanceTo(nugget.position) < 0.7) { 
                 console.log("Collected nugget!");
                 if(treasureAudio) treasureAudio.play();
                 playRandomQuote();
@@ -820,7 +816,7 @@ import { Water } from 'three/addons/objects/Water.js';
     function init() {
         console.log("init function started.");
         scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x95b0c0, 20, 120); // ADDED FOG
+        scene.fog = new THREE.Fog(0x95b0c0, 20, 120); 
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000000);
         camera.position.set(0, 2.0, 4.0);
@@ -897,11 +893,8 @@ import { Water } from 'three/addons/objects/Water.js';
         console.log("Attempting to add water planes. Water Normals loaded:", waterNormals && waterNormals.image && waterNormals.image.complete);
         if (Water && waterNormals && waterNormals.image && waterNormals.image.complete && waterNormals.image.naturalHeight !== 0) {
             const waterPlaneGeometry = new THREE.PlaneGeometry(10, waterLength, 10, 50);
-
-            // Apply Vertex Displacement for uneven river sides (Increased factor)
-            const widthSegments = waterPlaneGeometry.parameters.widthSegments; // Should be 10
-            const depthSegments = waterPlaneGeometry.parameters.depthSegments; // Should be 50
-
+            const widthSegments = waterPlaneGeometry.parameters.widthSegments; 
+            const depthSegments = waterPlaneGeometry.parameters.depthSegments; 
 
             let sunDir = new THREE.Vector3(0,1,0);
             if (sky && sky.material.uniforms.sunPosition) {
@@ -917,32 +910,31 @@ import { Water } from 'three/addons/objects/Water.js';
             const waterOptions = {
                 textureWidth: 512, textureHeight: 512, waterNormals: waterNormals,
                 sunDirection: sunDir, sunColor: 0xffffff,
-                waterColor: 0x00ccff, // Bright cyan for testing
+                waterColor: 0x00ccff, 
                 distortionScale: 2.0,
-                fog: true, // MODIFIED FOR FOG
+                fog: true, 
                 alpha: 1.0, 
                 scale: 4
             };
             water1 = new Water(waterPlaneGeometry, waterOptions);
             water1.rotation.x = -Math.PI / 2;
-            water1.position.y = -0.15; // Raised water level for testing
+            water1.position.y = -0.15; 
             water1.position.z = -waterLength / 2 + 50;
             scene.add(water1);
 
-            water2 = new Water(waterPlaneGeometry.clone(), waterOptions); // Assuming waterOptions is reused, so fog:true applies
+            water2 = new Water(waterPlaneGeometry.clone(), waterOptions); 
             water2.rotation.x = -Math.PI / 2;
-            water2.position.y = -0.15; // Raised water level for testing
+            water2.position.y = -0.15; 
             water2.position.z = water1.position.z - waterLength;
             scene.add(water2);
             console.log("Dual water planes added at Y:", water1.position.y);
 
             const bankMaterial = new THREE.MeshStandardMaterial({ color: 0x6B4423, side: THREE.DoubleSide }); 
 
-            // For water1
-            const leftBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
-            const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
-            modifyBankVertices(leftBank1Geometry, true); // true for left bank
-            modifyBankVertices(rightBank1Geometry, false); // false for right bank
+            const leftBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
+            const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
+            modifyBankVertices(leftBank1Geometry, true); 
+            modifyBankVertices(rightBank1Geometry, false); 
             const leftBank1 = new THREE.Mesh(leftBank1Geometry, bankMaterial);
             const rightBank1 = new THREE.Mesh(rightBank1Geometry, bankMaterial);
             leftBank1.rotation.x = -Math.PI / 2;
@@ -953,9 +945,8 @@ import { Water } from 'three/addons/objects/Water.js';
             scene.add(leftBank1); scene.add(rightBank1);
             leftBankMeshes.push(leftBank1); rightBankMeshes.push(rightBank1);
 
-            // For water2
-            const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
-            const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
+            const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
             modifyBankVertices(leftBank2Geometry, true);
             modifyBankVertices(rightBank2Geometry, false);
             const leftBank2 = new THREE.Mesh(leftBank2Geometry, bankMaterial);
@@ -977,26 +968,23 @@ import { Water } from 'three/addons/objects/Water.js';
             console.warn(logMessage);
         }
 
-        // Initialize global GLTFLoader
         const dracoLoader = new DRACOLoader(manager);
         dracoLoader.setDecoderPath( 'three/addons/loaders/draco/' );
-        gltfLoader = new GLTFLoader(manager); // Assign to global gltfLoader
+        gltfLoader = new GLTFLoader(manager); 
         gltfLoader.setDRACOLoader( dracoLoader );
             
-        // Call addCharacter. Trees, grass, fish will be called from its callback.
         addCharacter(); 
+        initParticleSystem(); 
 
-        initParticleSystem(); // Initialize particle system
-
-        gltfLoader.load('3Dmodels/rock.glb', (gltf) => { // Uses global gltfLoader
+        gltfLoader.load('3Dmodels/rock.glb', (gltf) => { 
             console.log("Rock model loaded.");
             for (let i = 0; i < 15; i++) {
                 const obstacle = gltf.scene.clone();
-                const baseScale = 0.08 + Math.random() * 0.12; // Rocks will be smaller on average: 0.08 to 0.2
-                const yScale = baseScale * (0.7 + Math.random() * 0.6); // Y scale can be 70% to 130% of baseScale
+                const baseScale = 0.08 + Math.random() * 0.12; 
+                const yScale = baseScale * (0.7 + Math.random() * 0.6); 
                 obstacle.scale.set(baseScale, yScale, baseScale);
                 obstacle.rotation.y = Math.random() * Math.PI * 2;
-                obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.15, -20 - i * 20); // Lowered rocks
+                obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.15, -20 - i * 20); 
                 obstacle.traverse(node => { if (node.isMesh) node.castShadow = true; });
                 obstacles.push(obstacle);
                 scene.add(obstacle);
@@ -1007,11 +995,11 @@ import { Water } from 'three/addons/objects/Water.js';
             console.log("Gold nugget model loaded.");
             for (let i = 0; i < 10; i++) {
                 const nugget = gltf.scene.clone();
-                const scale = 5.0; // INCREASED NUGGET SCALE SIGNIFICANTLY
+                const scale = 5.0; 
                 nugget.scale.set(scale, scale, scale);
                 nugget.position.set(
                     lanePositions[Math.floor(Math.random() * 3)],
-                    0.1, // Adjusted Y for nuggets
+                    0.1, 
                     -25 - i * 30 - Math.random() * 10
                 );
                 console.log("Nugget ["+i+"]: added at X:", nugget.position.x, "Y:", nugget.position.y, "Z:", nugget.position.z);
@@ -1028,13 +1016,9 @@ import { Water } from 'three/addons/objects/Water.js';
         console.log("init function completed.");
     }
 
-    function addCharacter(){ // Now uses the global gltfLoader
+    function addCharacter(){ 
         console.log("addCharacter function called.");
-        // const dracoLoader = new DRACOLoader(manager); // Removed, use global
-        // dracoLoader.setDecoderPath( 'three/addons/loaders/draco/' ); // Removed
-        // const loader4 = new GLTFLoader(manager); // Removed, use global
-        // loader4.setDRACOLoader( dracoLoader ); // Removed
-        gltfLoader.load('3Dmodels/Lumberjack_on_a_log.glb', function (gltf) { // Use global gltfLoader
+        gltfLoader.load('3Dmodels/Lumberjack_on_a_log.glb', function (gltf) { 
                 console.log("Lumberjack_on_a_log.glb loaded successfully in addCharacter.");
                 character = gltf.scene;
                 character.scale.set(0.4, 0.4, 0.4);
@@ -1046,18 +1030,17 @@ import { Water } from 'three/addons/objects/Water.js';
                 character.rotation.y = Math.PI;
                 character.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; }});
                 scene.add(character);
-                targetLane = currentLane; // Initialize targetLane based on currentLane
+                targetLane = currentLane; 
                 console.log("Character added to scene. BaseYOffset:", characterBaseYOffset, "Final Y:", character.position.y);
 
-                // NOW, CALL DEPENDENT FUNCTIONS
                 console.log("Character loaded, now calling addTrees, addGrass, addFishes.");
-                if (forestMesh1 && forestMesh2) { // Ensure terrain is ready
+                if (forestMesh1 && forestMesh2) { 
                     addTrees();
                     addGrass();
                 } else {
                     console.error("Terrain meshes not ready when trying to add trees/grass after character load.");
                 }
-                addFishes(); // Fishes depend on character position primarily
+                addFishes(); 
             },
             xhr => console.log('Lumberjack model ' + (xhr.loaded / xhr.total * 100) + '% loaded'),
             err => console.error('Error loading Lumberjack_on_a_log.glb:', err)
@@ -1120,7 +1103,6 @@ import { Water } from 'three/addons/objects/Water.js';
                 }
             }
 
-            // Update bank positions to follow water
             if (leftBankMeshes.length >= 2 && rightBankMeshes.length >=2 && water1 && water2) {
                 leftBankMeshes[0].position.z = water1.position.z;
                 rightBankMeshes[0].position.z = water1.position.z;
@@ -1149,7 +1131,6 @@ import { Water } from 'three/addons/objects/Water.js';
                 }
             }
 
-            // Fish animation
             for (let fish of fishes) {
                 const fishJumpHeight = 0.8; 
                 const fishJumpDuration = 0.6; 
@@ -1166,13 +1147,11 @@ import { Water } from 'three/addons/objects/Water.js';
                 const rotationAngle = Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * Math.PI;
                 fish.rotation.x = rotationAngle;
                 const waterSurfaceYForFishSplash = water1 ? water1.position.y : -0.15;
-                // Check for exiting water
                 if (fish.userData.previousY <= waterSurfaceYForFishSplash && fish.position.y > waterSurfaceYForFishSplash) {
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02);
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0);
                 }
-                // Check for re-entering water
                 else if (fish.userData.previousY > waterSurfaceYForFishSplash && fish.position.y <= waterSurfaceYForFishSplash) {
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02);
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0);
                 }
                 fish.userData.previousY = fish.position.y;
 
@@ -1196,96 +1175,85 @@ import { Water } from 'three/addons/objects/Water.js';
                 }
             }
 
-            // Tree recycling
             for (let tree of trees) {
-                tree.position.z += speed; // Trees move with the terrain/water
-
-                // If a tree moves past the character's view plus half a forest segment, recycle it
+                tree.position.z += speed; 
                 if (character && tree.position.z > character.position.z + (forestLength / 2) + 20) {
                     const side = (Math.random() < 0.5) ? -1 : 1;
                     tree.position.x = side * (7 + 5 + Math.random() * 60);
-                    // Recycle to the back, behind the second terrain segment, relative to character.
                     tree.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
 
                     const randomScaleBase = 1.5 + Math.random() * 1.0;
                     const randomScaleY = randomScaleBase * (1.0 + Math.random() * 1.0);
                     tree.scale.set(randomScaleBase, randomScaleY, randomScaleBase);
                     tree.rotation.y = Math.random() * Math.PI * 2;
-                } else if (!character && tree.position.z > (forestLength / 2) + 20) { // Fallback if character not loaded
+                } else if (!character && tree.position.z > (forestLength / 2) + 20) { 
                     const side = (Math.random() < 0.5) ? -1 : 1;
                     tree.position.x = side * (7 + 5 + Math.random() * 60);
                     tree.position.z = -(forestLength / 2) - Math.random() * (forestLength/2);
                 }
             }
 
-            // Grass recycling & animation update
             if (leavesMaterial && leavesMaterial.uniforms && leavesMaterial.uniforms.time) {
                 leavesMaterial.uniforms.time.value = clock.getElapsedTime();
             }
 
-            for (let grassPatch of grasss) { // Now grasss contains InstancedMesh objects
+            for (let grassPatch of grasss) { 
                 grassPatch.position.z += speed;
 
                 if (character && grassPatch.position.z > character.position.z + (forestLength / 2) + 20) {
                     const side = (Math.random() < 0.5) ? -1 : 1;
-                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); // Matches new addGrass
+                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); 
                     grassPatch.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
-                    // Individual blade matrices within the patch are not re-randomized upon recycling the patch itself.
-                } else if (!character && grassPatch.position.z > (forestLength / 2) + 20) { // Fallback
+                } else if (!character && grassPatch.position.z > (forestLength / 2) + 20) { 
                     const side = (Math.random() < 0.5) ? -1 : 1;
-                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); // Matches new addGrass
+                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); 
                     grassPatch.position.z = -(forestLength / 2) - Math.random() * (forestLength / 2);
                 }
             }
 
-            updateParticles(1/fps); // Update all active particles
+            updateParticles(1/fps); 
 
-            // Continuous wake for obstacles
             const waterSurfaceY = water1 ? water1.position.y : -0.15;
             for (let obstacle of obstacles) {
-                // Check if the base of the obstacle is near the water surface
-                // Assuming obstacle.position.y is the center, and its height is roughly 2*obstacle.scale.y (approx for default rock)
-                // A better way would be to use bounding box, but let's use an approximation
-                const rockBaseApproxY = obstacle.position.y - (obstacle.scale.y * 0.5); // Approximate base of rock
-                if (Math.abs(rockBaseApproxY - waterSurfaceY) < 0.3 && obstacle.position.z < (character ? character.position.z : 0) + 10 && obstacle.position.z > (character ? character.position.z : 0) - 70) { // Wake for rocks near water & in view
+                const rockBaseApproxY = obstacle.position.y - (obstacle.scale.y * 0.5); 
+                if (Math.abs(rockBaseApproxY - waterSurfaceY) < 0.3 && obstacle.position.z < (character ? character.position.z : 0) + 10 && obstacle.position.z > (character ? character.position.z : 0) - 70) { 
                     obstacle.userData = obstacle.userData || {};
                     const now = performance.now();
-                    const wakeCooldown = 100 + Math.random() * 100; // More frequent than impact splashes
+                    const wakeCooldown = 100 + Math.random() * 100; 
 
                     if (!obstacle.userData.lastWakeTime || (now - obstacle.userData.lastWakeTime > wakeCooldown)) {
-                        // Emit particles slightly behind the obstacle's center
-                        // The Z offset depends on the rock's size, let's use a small fixed offset for now
-                        const wakePos = new THREE.Vector3(obstacle.position.x, waterSurfaceY + 0.05, obstacle.position.z + obstacle.scale.z * 0.5); 
+                        // Frontal Splash
+                        const frontSplashPos = new THREE.Vector3(obstacle.position.x, waterSurfaceY + 0.05, obstacle.position.z - obstacle.scale.z * 0.5);
+                        emitSplash(frontSplashPos, 1 + Math.floor(Math.random() * 2), 0.04, -Math.PI / 2, 1.0, 0.7); 
+
+                        // V-Shaped Rear Wake
+                        const rearEmitterOffset = obstacle.scale.z * 0.3; 
+                        const vSpreadAngle = Math.PI / 6; 
                         
-                        // Customize emitSplash or use a new emitWake for different particle behavior
-                        // For now, let's use emitSplash with adjusted parameters for a softer, more spread-out wake
-                        emitSplash(wakePos, 2 + Math.floor(Math.random() * 2), 0.03 + Math.random()*0.02); 
+                        const wakePos1 = new THREE.Vector3(obstacle.position.x - obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
+                        emitSplash(wakePos1, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 + vSpreadAngle, 1.0, 0.5); 
+                                                                                                        
+                        const wakePos2 = new THREE.Vector3(obstacle.position.x + obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
+                        emitSplash(wakePos2, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 - vSpreadAngle, 1.0, 0.5);
+                        
                         obstacle.userData.lastWakeTime = now;
                     }
                 }
             }
 
-            // Continuous rear wake for character
             if (character && speed > 0.05 && animationLoopStarted && !isPaused) { 
                 character.userData = character.userData || {};
                 const now = performance.now();
-                // Cooldown can be adjusted for wake density
-                const rearWakeCooldown = 50 + Math.random() * 50; // Potentially more frequent for a denser wake
+                const rearWakeCooldown = 50 + Math.random() * 50; 
 
                 if (!character.userData.lastRearWakeTime || (now - character.userData.lastRearWakeTime > rearWakeCooldown)) {
                     const waterYWake = water1 ? water1.position.y : -0.15;
-                    // Position the wake behind the character's log
-                    // The Z offset (+0.7) is an estimate, adjust based on the log's actual size and pivot
                     const rearWakePosition = new THREE.Vector3(
                         character.position.x, 
                         waterYWake + 0.05, 
                         character.position.z + 0.7 
                     );
-                    // Use emitSplash, but consider that wake particles might need different characteristics
-                    // (e.g., velocity mostly backwards, less upward motion, perhaps different lifetime/opacity)
-                    // For now, using existing emitSplash with potentially adjusted parameters:
-                    emitSplash(rearWakePosition, 2 + Math.floor(Math.random() * 3), 0.03 + Math.random()*0.03); 
-
+                    emitSplash(rearWakePosition, 2 + Math.floor(Math.random() * 3), 0.03 + Math.random()*0.03, Math.PI / 2, 1.0, 0.6); 
                     character.userData.lastRearWakeTime = now;
                 }
             }
@@ -1293,9 +1261,9 @@ import { Water } from 'three/addons/objects/Water.js';
             updatePoints();
             updateCamera();
             if (character && camera && directionalLight) {
-                directionalLight.position.set(camera.position.x + 1.5, camera.position.y + 3, camera.position.z + 0.5); // Position light slightly above and behind camera
+                directionalLight.position.set(camera.position.x + 1.5, camera.position.y + 3, camera.position.z + 0.5); 
                 directionalLight.target.position.copy(character.position);
-                directionalLight.target.updateMatrixWorld(); // Important for target changes
+                directionalLight.target.updateMatrixWorld(); 
             }
             checkCollisions();
             applyCameraShake();
