@@ -109,6 +109,8 @@ import { Water } from 'three/addons/objects/Water.js';
     let trees = [];
     let fishes = []; // This remains
     let grasss = [];
+    let leftBankMeshes = [];
+    let rightBankMeshes = [];
     let forestMesh1, forestMesh2; // For dual plane terrain looping
     const forestLength = 600; // Length of one terrain/water segment
     const waterLength = 600;  // Length of one water segment
@@ -267,6 +269,40 @@ import { Water } from 'three/addons/objects/Water.js';
     let particlePool = [];
     const maxParticles = 100; 
     let particleSystemContainer; 
+
+      function modifyBankVertices(geometry, isLeftBank) {
+          const positions = geometry.attributes.position;
+          const widthSegments = geometry.parameters.widthSegments;
+          const depthSegments = geometry.parameters.depthSegments; // This corresponds to heightSegments of PlaneGeometry
+          const halfWidth = geometry.parameters.width / 2;
+
+          for (let j = 0; j <= depthSegments; j++) { // Iterate along the length (depth)
+              for (let i = 0; i <= widthSegments; i++) { // Iterate across the width
+                  const index = j * (widthSegments + 1) + i;
+                  
+                  let isOuterEdgeVertex = false;
+                  if (isLeftBank && i === 0) { // Vertices on the far left edge (local -X) of the left bank's geometry
+                      isOuterEdgeVertex = true;
+                  } else if (!isLeftBank && i === widthSegments) { // Vertices on the far right edge (local +X) of the right bank's geometry
+                      isOuterEdgeVertex = true;
+                  }
+
+                  if (isOuterEdgeVertex) {
+                      // Modify local Y for height variation (becomes world Z after rotation)
+                      let currentLocalY = positions.getY(index);
+                      currentLocalY += (Math.random() - 0.5) * 0.8; // Vary height by +/- 0.4 units
+                      positions.setY(index, currentLocalY);
+
+                      // Modify local X for jaggedness along the river bank edge
+                      let currentLocalX = positions.getX(index);
+                      currentLocalX += (Math.random() - 0.5) * 0.3; // Vary local X by +/- 0.15 units
+                      positions.setX(index, currentLocalX);
+                  }
+              }
+          }
+          positions.needsUpdate = true;
+          geometry.computeVertexNormals();
+      }
 
     function initSky() {
         console.log("initSky function called.");
@@ -796,7 +832,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
         fillLight = new THREE.HemisphereLight(0x8dc1de, 0x00668d, 1.5);
         scene.add(fillLight);
-        directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        directionalLight = new THREE.DirectionalLight(0xffffff, 3.0);
         directionalLight.position.set(0, 10, 10);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 1024;
@@ -805,6 +841,8 @@ import { Water } from 'three/addons/objects/Water.js';
         directionalLight.shadow.camera.far = 50;
         scene.add(directionalLight);
         scene.add(directionalLight.target);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
         renderer.shadowMap.enabled = true;
 
         console.log("Attempting to add terrain planes.");
@@ -853,30 +891,12 @@ import { Water } from 'three/addons/objects/Water.js';
 
         console.log("Attempting to add water planes. Water Normals loaded:", waterNormals && waterNormals.image && waterNormals.image.complete);
         if (Water && waterNormals && waterNormals.image && waterNormals.image.complete && waterNormals.image.naturalHeight !== 0) {
-            const waterPlaneGeometry = new THREE.PlaneGeometry(14, waterLength, 10, 50);
+            const waterPlaneGeometry = new THREE.PlaneGeometry(8, waterLength, 10, 50);
 
             // Apply Vertex Displacement for uneven river sides (Increased factor)
             const widthSegments = waterPlaneGeometry.parameters.widthSegments; // Should be 10
             const depthSegments = waterPlaneGeometry.parameters.depthSegments; // Should be 50
 
-            console.log("Applying uneven river side modifications to waterPlaneGeometry...");
-
-            for (let j = 0; j <= depthSegments; j++) { // Iterate along the length of the river (Y-axis of the geometry)
-                // Left edge vertex (local -X side of the plane)
-                const leftEdgeIndex = j * (widthSegments + 1);
-                let xLeft = waterPlaneGeometry.attributes.position.getX(leftEdgeIndex);
-                xLeft += (Math.random() - 0.5) * 15.0; // Increased magnitude significantly
-                waterPlaneGeometry.attributes.position.setX(leftEdgeIndex, xLeft);
-
-                // Right edge vertex (local +X side of the plane)
-                const rightEdgeIndex = j * (widthSegments + 1) + widthSegments;
-                let xRight = waterPlaneGeometry.attributes.position.getX(rightEdgeIndex);
-                xRight += (Math.random() - 0.5) * 15.0; // Increased magnitude significantly
-                waterPlaneGeometry.attributes.position.setX(rightEdgeIndex, xRight);
-            }
-            waterPlaneGeometry.attributes.position.needsUpdate = true;
-            waterPlaneGeometry.computeVertexNormals(); // Recalculate normals
-            console.log("WaterPlaneGeometry modification complete. NeedsUpdate and computeVertexNormals called.");
 
             let sunDir = new THREE.Vector3(0,1,0);
             if (sky && sky.material.uniforms.sunPosition) {
@@ -910,6 +930,38 @@ import { Water } from 'three/addons/objects/Water.js';
             water2.position.z = water1.position.z - waterLength;
             scene.add(water2);
             console.log("Dual water planes added at Y:", water1.position.y);
+
+            const bankMaterial = new THREE.MeshStandardMaterial({ color: 0x6B4423, side: THREE.DoubleSide }); 
+
+            // For water1
+            const leftBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            modifyBankVertices(leftBank1Geometry, true); // true for left bank
+            modifyBankVertices(rightBank1Geometry, false); // false for right bank
+            const leftBank1 = new THREE.Mesh(leftBank1Geometry, bankMaterial);
+            const rightBank1 = new THREE.Mesh(rightBank1Geometry, bankMaterial);
+            leftBank1.rotation.x = -Math.PI / 2;
+            leftBank1.position.set(-5, water1.position.y - 0.05, water1.position.z);
+            rightBank1.rotation.x = -Math.PI / 2;
+            rightBank1.position.set(5, water1.position.y - 0.05, water1.position.z);
+            leftBank1.receiveShadow = true; rightBank1.receiveShadow = true;
+            scene.add(leftBank1); scene.add(rightBank1);
+            leftBankMeshes.push(leftBank1); rightBankMeshes.push(rightBank1);
+
+            // For water2
+            const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 5, 20);
+            modifyBankVertices(leftBank2Geometry, true);
+            modifyBankVertices(rightBank2Geometry, false);
+            const leftBank2 = new THREE.Mesh(leftBank2Geometry, bankMaterial);
+            const rightBank2 = new THREE.Mesh(rightBank2Geometry, bankMaterial);
+            leftBank2.rotation.x = -Math.PI / 2;
+            leftBank2.position.set(-8, water2.position.y - 0.05, water2.position.z);
+            rightBank2.rotation.x = -Math.PI / 2;
+            rightBank2.position.set(8, water2.position.y - 0.05, water2.position.z);
+            leftBank2.receiveShadow = true; rightBank2.receiveShadow = true;
+            scene.add(leftBank2); scene.add(rightBank2);
+            leftBankMeshes.push(leftBank2); rightBankMeshes.push(rightBank2);
         } else {
             let logMessage = "Water not created. Reasons: ";
             if (!Water) logMessage += "Water class not found. ";
@@ -1009,8 +1061,8 @@ import { Water } from 'three/addons/objects/Water.js';
     function updateCamera() {
         if (!character || !camera) return;
         const desiredX = character.position.x;
-        const desiredY = character.position.y + 3.0;
-        const desiredZ = character.position.z + 5.0;
+        const desiredY = character.position.y + 1.8;
+        const desiredZ = character.position.z + 3.0;
         camera.position.x = desiredX;
         camera.position.y = desiredY;
         camera.position.z = desiredZ;
@@ -1061,6 +1113,14 @@ import { Water } from 'three/addons/objects/Water.js';
                 if (water2.position.z > character.position.z + waterLength / 2 + 20) {
                     water2.position.z = water1.position.z - waterLength + speed;
                 }
+            }
+
+            // Update bank positions to follow water
+            if (leftBankMeshes.length >= 2 && rightBankMeshes.length >=2 && water1 && water2) {
+                leftBankMeshes[0].position.z = water1.position.z;
+                rightBankMeshes[0].position.z = water1.position.z;
+                leftBankMeshes[1].position.z = water2.position.z;
+                rightBankMeshes[1].position.z = water2.position.z;
             }
 
             for (let obstacle of obstacles) {
@@ -1214,7 +1274,7 @@ import { Water } from 'three/addons/objects/Water.js';
             updatePoints();
             updateCamera();
             if (character && camera && directionalLight) {
-                directionalLight.position.set(camera.position.x, camera.position.y + 5, camera.position.z + 3); // Position light slightly above and behind camera
+                directionalLight.position.set(camera.position.x + 1.5, camera.position.y + 3, camera.position.z + 0.5); // Position light slightly above and behind camera
                 directionalLight.target.position.copy(character.position);
                 directionalLight.target.updateMatrixWorld(); // Important for target changes
             }
