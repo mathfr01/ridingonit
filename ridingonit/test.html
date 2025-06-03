@@ -292,12 +292,13 @@ import { Water } from 'three/addons/objects/Water.js';
                   if (isOuterEdgeVertex) {
                       // Modify local Z for height variation (this becomes world Y after rotation)
                       let currentLocalZ = positions.getZ(index); // Should be 0 for a new PlaneGeometry
-                      currentLocalZ += (Math.random() - 0.5) * 0.8; // Vary height by +/- 0.4 units
+                      currentLocalZ += (Math.random() - 0.5) * 1.5; // MODIFIED: Vary height by +/- 0.75 units
                       positions.setZ(index, currentLocalZ);
 
                       // Modify local X for jaggedness along the river bank edge
                       let currentLocalX = positions.getX(index);
-                      currentLocalX += (Math.random() - 0.5) * 0.3; // Vary local X by +/- 0.15 units
+                      // MODIFIED: Apply sinusoidal variation combined with randomness for a more natural look
+                      currentLocalX += Math.sin(j * 0.5) * 0.2 + (Math.random() - 0.5) * 0.2; 
                       positions.setX(index, currentLocalX);
                   }
               }
@@ -819,6 +820,7 @@ import { Water } from 'three/addons/objects/Water.js';
     function init() {
         console.log("init function started.");
         scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x95b0c0, 20, 120); // ADDED FOG
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000000);
         camera.position.set(0, 2.0, 4.0);
@@ -917,8 +919,8 @@ import { Water } from 'three/addons/objects/Water.js';
                 sunDirection: sunDir, sunColor: 0xffffff,
                 waterColor: 0x00ccff, // Bright cyan for testing
                 distortionScale: 2.0,
-                fog: false,
-                alpha: 1.0, // Fully opaque for testing
+                fog: true, // MODIFIED FOR FOG
+                alpha: 1.0, 
                 scale: 4
             };
             water1 = new Water(waterPlaneGeometry, waterOptions);
@@ -927,7 +929,7 @@ import { Water } from 'three/addons/objects/Water.js';
             water1.position.z = -waterLength / 2 + 50;
             scene.add(water1);
 
-            water2 = new Water(waterPlaneGeometry.clone(), waterOptions);
+            water2 = new Water(waterPlaneGeometry.clone(), waterOptions); // Assuming waterOptions is reused, so fog:true applies
             water2.rotation.x = -Math.PI / 2;
             water2.position.y = -0.15; // Raised water level for testing
             water2.position.z = water1.position.z - waterLength;
@@ -1238,39 +1240,53 @@ import { Water } from 'three/addons/objects/Water.js';
 
             updateParticles(1/fps); // Update all active particles
 
-            // Rock splash triggering logic
-            const waterY = water1 ? water1.position.y : -0.15; 
-
+            // Continuous wake for obstacles
+            const waterSurfaceY = water1 ? water1.position.y : -0.15;
             for (let obstacle of obstacles) {
-                if (character && Math.abs(obstacle.position.z - character.position.z) < 30 && obstacle.position.z < character.position.z) {
-                    if (Math.abs(obstacle.position.y - waterY) < 0.2) { 
-                        obstacle.userData = obstacle.userData || {};
-                        const now = performance.now();
-                        if (!obstacle.userData.lastSplashTime || (now - obstacle.userData.lastSplashTime > 500 + Math.random() * 500)) { 
-                            const splashPos = new THREE.Vector3(obstacle.position.x, waterY + 0.1, obstacle.position.z - 0.1);
-                            emitSplash(splashPos, 3 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.05); 
-                            obstacle.userData.lastSplashTime = now;
-                       }
-                   }
-               }
+                // Check if the base of the obstacle is near the water surface
+                // Assuming obstacle.position.y is the center, and its height is roughly 2*obstacle.scale.y (approx for default rock)
+                // A better way would be to use bounding box, but let's use an approximation
+                const rockBaseApproxY = obstacle.position.y - (obstacle.scale.y * 0.5); // Approximate base of rock
+                if (Math.abs(rockBaseApproxY - waterSurfaceY) < 0.3 && obstacle.position.z < (character ? character.position.z : 0) + 10 && obstacle.position.z > (character ? character.position.z : 0) - 70) { // Wake for rocks near water & in view
+                    obstacle.userData = obstacle.userData || {};
+                    const now = performance.now();
+                    const wakeCooldown = 100 + Math.random() * 100; // More frequent than impact splashes
+
+                    if (!obstacle.userData.lastWakeTime || (now - obstacle.userData.lastWakeTime > wakeCooldown)) {
+                        // Emit particles slightly behind the obstacle's center
+                        // The Z offset depends on the rock's size, let's use a small fixed offset for now
+                        const wakePos = new THREE.Vector3(obstacle.position.x, waterSurfaceY + 0.05, obstacle.position.z + obstacle.scale.z * 0.5); 
+                        
+                        // Customize emitSplash or use a new emitWake for different particle behavior
+                        // For now, let's use emitSplash with adjusted parameters for a softer, more spread-out wake
+                        emitSplash(wakePos, 2 + Math.floor(Math.random() * 2), 0.03 + Math.random()*0.02); 
+                        obstacle.userData.lastWakeTime = now;
+                    }
+                }
             }
 
-            // Continuous forward splash (wake)
+            // Continuous rear wake for character
             if (character && speed > 0.05 && animationLoopStarted && !isPaused) { 
                 character.userData = character.userData || {};
                 const now = performance.now();
-                const wakeCooldown = 150 + Math.random() * 100; 
+                // Cooldown can be adjusted for wake density
+                const rearWakeCooldown = 50 + Math.random() * 50; // Potentially more frequent for a denser wake
 
-                if (!character.userData.lastWakeSplashTime || (now - character.userData.lastWakeSplashTime > wakeCooldown)) {
+                if (!character.userData.lastRearWakeTime || (now - character.userData.lastRearWakeTime > rearWakeCooldown)) {
                     const waterYWake = water1 ? water1.position.y : -0.15;
-                    const frontSplashPosition = new THREE.Vector3(
+                    // Position the wake behind the character's log
+                    // The Z offset (+0.7) is an estimate, adjust based on the log's actual size and pivot
+                    const rearWakePosition = new THREE.Vector3(
                         character.position.x, 
                         waterYWake + 0.05, 
-                        character.position.z - 0.5 
+                        character.position.z + 0.7 
                     );
-                    emitSplash(frontSplashPosition, 1 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02); 
+                    // Use emitSplash, but consider that wake particles might need different characteristics
+                    // (e.g., velocity mostly backwards, less upward motion, perhaps different lifetime/opacity)
+                    // For now, using existing emitSplash with potentially adjusted parameters:
+                    emitSplash(rearWakePosition, 2 + Math.floor(Math.random() * 3), 0.03 + Math.random()*0.03); 
 
-                    character.userData.lastWakeSplashTime = now;
+                    character.userData.lastRearWakeTime = now;
                 }
             }
 
