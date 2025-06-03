@@ -290,12 +290,12 @@ import { Water } from 'three/addons/objects/Water.js';
                   if (isOuterEdgeVertex) {
                       // Modify local Y for height variation (becomes world Z after rotation)
                       let currentLocalY = positions.getY(index);
-                      currentLocalY += (Math.random() - 0.5) * 0.8; // Vary height by +/- 0.4 units
+                      currentLocalY += (Math.random() - 0.5) * 5.0; // Vary height by +/- 0.4 units
                       positions.setY(index, currentLocalY);
 
                       // Modify local X for jaggedness along the river bank edge
                       let currentLocalX = positions.getX(index);
-                      currentLocalX += (Math.random() - 0.5) * 0.3; // Vary local X by +/- 0.15 units
+                      currentLocalX += (Math.random() - 0.5) * 2.0; // Vary local X by +/- 0.15 units
                       positions.setX(index, currentLocalX);
                   }
               }
@@ -891,7 +891,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
         console.log("Attempting to add water planes. Water Normals loaded:", waterNormals && waterNormals.image && waterNormals.image.complete);
         if (Water && waterNormals && waterNormals.image && waterNormals.image.complete && waterNormals.image.naturalHeight !== 0) {
-            const waterPlaneGeometry = new THREE.PlaneGeometry(8, waterLength, 10, 50);
+            const waterPlaneGeometry = new THREE.PlaneGeometry(14, waterLength, 10, 50);
 
             // Apply Vertex Displacement for uneven river sides (Increased factor)
             const widthSegments = waterPlaneGeometry.parameters.widthSegments; // Should be 10
@@ -941,9 +941,9 @@ import { Water } from 'three/addons/objects/Water.js';
             const leftBank1 = new THREE.Mesh(leftBank1Geometry, bankMaterial);
             const rightBank1 = new THREE.Mesh(rightBank1Geometry, bankMaterial);
             leftBank1.rotation.x = -Math.PI / 2;
-            leftBank1.position.set(-5, water1.position.y - 0.05, water1.position.z);
+            leftBank1.position.set(-8, water1.position.y - 0.05, water1.position.z);
             rightBank1.rotation.x = -Math.PI / 2;
-            rightBank1.position.set(5, water1.position.y - 0.05, water1.position.z);
+            rightBank1.position.set(8, water1.position.y - 0.05, water1.position.z);
             leftBank1.receiveShadow = true; rightBank1.receiveShadow = true;
             scene.add(leftBank1); scene.add(rightBank1);
             leftBankMeshes.push(leftBank1); rightBankMeshes.push(rightBank1);
@@ -1061,8 +1061,8 @@ import { Water } from 'three/addons/objects/Water.js';
     function updateCamera() {
         if (!character || !camera) return;
         const desiredX = character.position.x;
-        const desiredY = character.position.y + 1.8;
-        const desiredZ = character.position.z + 3.0;
+        const desiredY = character.position.y + 1.6;
+        const desiredZ = character.position.z + 2.5;
         camera.position.x = desiredX;
         camera.position.y = desiredY;
         camera.position.z = desiredZ;
