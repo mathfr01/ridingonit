@@ -271,18 +271,21 @@ import { Water } from 'three/addons/objects/Water.js';
     let particleSystemContainer; 
 
       function modifyBankVertices(geometry, isLeftBank) {
-          console.log('Modifying bank vertices for:', isLeftBank ? 'Left Bank' : 'Right Bank', 'ID:', geometry.uuid);
+          console.log('--- Modifying bank START ---');
+          console.log('Target Geometry UUID:', geometry.uuid);
+          console.log('Parameters: WidthSegs:', geometry.parameters.widthSegments, 'HeightSegs:', geometry.parameters.heightSegments); 
+          console.log('Is Left Bank:', isLeftBank);
+          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+
           const positions = geometry.attributes.position;
           const widthSegments = geometry.parameters.widthSegments;
-          const depthSegments = geometry.parameters.depthSegments; // This is 'heightSegments' for PlaneGeometry
+          const depthSegments = geometry.parameters.depthSegments; 
 
-          for (let j = 0; j <= depthSegments; j++) { // Iterate along the length (local Y direction of PlaneGeometry)
-              for (let i = 0; i <= widthSegments; i++) { // Iterate across the width (local X direction of PlaneGeometry)
+          for (let j = 0; j <= depthSegments; j++) { 
+              for (let i = 0; i <= widthSegments; i++) { 
                   const index = j * (widthSegments + 1) + i;
                   
                   let isOuterEdgeVertex = false;
-                  // Outer edge for left bank is i=0 (local -X side)
-                  // Outer edge for right bank is i=widthSegments (local +X side)
                   if (isLeftBank && i === 0) { 
                       isOuterEdgeVertex = true;
                   } else if (!isLeftBank && i === widthSegments) { 
@@ -290,20 +293,27 @@ import { Water } from 'three/addons/objects/Water.js';
                   }
 
                   if (isOuterEdgeVertex) {
-                      // Modify local Z for height variation (this becomes world Y after rotation)
                       let currentLocalZ = positions.getZ(index); 
-                      currentLocalZ += (Math.random() - 0.5) * 2.5; // INCREASED AMPLITUDE
+                      currentLocalZ += (Math.random() - 0.5) * 5.0; 
                       positions.setZ(index, currentLocalZ);
 
-                      // Modify local X for jaggedness along the river bank edge
                       let currentLocalX = positions.getX(index);
-                      // Using 'j' (loop variable for length segments) for smoother, wave-like variation along the bank
-                      currentLocalX += Math.sin(j * 0.2) * 0.5 + (Math.random() - 0.5) * 0.4; // INCREASED AMPLITUDE & ADJUSTED SINE
+                      currentLocalX += Math.sin(j * 0.15) * 1.2 + (Math.random() - 0.5) * 1.0; 
                       positions.setX(index, currentLocalX);
+                      
+                      let xVal = positions.getX(index);
+                      let zVal = positions.getZ(index);
+                      if (xVal < minX) minX = xVal;
+                      if (xVal > maxX) maxX = xVal;
+                      if (zVal < minZ) minZ = zVal;
+                      if (zVal > maxZ) maxZ = zVal;
                   }
               }
           }
           
+          console.log('Modified vertex ranges (local X):', minX, 'to', maxX);
+          console.log('Modified vertex ranges (local Z - height):', minZ, 'to', maxZ);
+          console.log('--- Modifying bank END for:', geometry.uuid, '---');
           positions.needsUpdate = true;
           geometry.computeVertexNormals();
       }
@@ -510,26 +520,26 @@ import { Water } from 'three/addons/objects/Water.js';
        }
     }
 
-    function emitSplash(position, count = 5, baseVelocity = 0.1, angleOffset = 0, speedMultiplier = 1.0, upwardSpeedBias = 1.0) {
+    function emitSplash(position, count = 5, baseVelocity = 0.1, angleOffset = 0, speedMultiplier = 1.0, upwardSpeedBias = 1.0, particleScaleMultiplier = 1.0, lifeMultiplier = 1.0) {
        let emittedCount = 0;
        for (let p of particlePool) {
            if (!p.isActive) {
                p.sprite.visible = true;
                p.isActive = true;
-               p.life = 1.0 + Math.random() * 0.5; 
+               p.life = (1.0 + Math.random() * 0.5) * lifeMultiplier; 
                p.sprite.position.copy(position);
                
-               const randomAngleComponent = (Math.random() - 0.5) * (Math.PI / 4); // Spread
+               const randomAngleComponent = (Math.random() - 0.5) * (Math.PI / 4); 
                const finalAngle = angleOffset + randomAngleComponent;
                const effectiveBaseVelocity = baseVelocity * speedMultiplier;
-               const upwardSpeed = (baseVelocity + Math.random() * baseVelocity) * upwardSpeedBias; // Apply bias
+               const upwardSpeed = (baseVelocity + Math.random() * baseVelocity) * upwardSpeedBias; 
 
                p.velocity.set(
                    Math.cos(finalAngle) * effectiveBaseVelocity * (0.5 + Math.random() * 0.5),
                    upwardSpeed,
                    Math.sin(finalAngle) * effectiveBaseVelocity * (0.5 + Math.random() * 0.5)
                );
-               p.sprite.scale.set(p.initialScale, p.initialScale, p.initialScale);
+               p.sprite.scale.set(p.initialScale * particleScaleMultiplier, p.initialScale * particleScaleMultiplier, p.initialScale * particleScaleMultiplier);
                p.sprite.material.opacity = 0.8;
 
                emittedCount++;
@@ -550,12 +560,12 @@ import { Water } from 'three/addons/objects/Water.js';
                    p.sprite.position.addScaledVector(p.velocity, delta * 20); 
                    p.velocity.y -= p.gravity * delta * 20; 
 
-                   const lifeRatio = Math.max(0, p.life / (1.0 + 0.5)); 
+                   const lifeRatio = Math.max(0, p.life / (1.0 + 0.5)); // Original base lifetime was 1.0 to 1.5
                    p.sprite.material.opacity = Math.max(0, lifeRatio * 0.8);
                    
                    let currentScale = p.sprite.scale.x;
-                   currentScale += p.scaleSpeed * delta * 10;
-                   currentScale = Math.min(currentScale, p.maxScale);
+                   currentScale += p.scaleSpeed * delta * 10; 
+                   currentScale = Math.min(currentScale, p.maxScale * (p.sprite.scale.x / p.initialScale)); // Adjust max scale if initial was multiplied
                    p.sprite.scale.set(currentScale, currentScale, currentScale);
                }
            }
@@ -608,7 +618,7 @@ import { Water } from 'three/addons/objects/Water.js';
                         character.position.z
                     );
                 }
-                emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0);
+                emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0, 1.0, 1.0);
 
                 smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
                     currentLane = targetLane;
@@ -672,7 +682,7 @@ import { Water } from 'three/addons/objects/Water.js';
                     character.position.z
                 );
             }
-            emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0);
+            emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0, 1.0, 1.0);
             
             smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
                 currentLane = targetLane; isTransitioning = false;
@@ -931,10 +941,20 @@ import { Water } from 'three/addons/objects/Water.js';
 
             const bankMaterial = new THREE.MeshStandardMaterial({ color: 0x6B4423, side: THREE.DoubleSide }); 
 
-            const leftBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
-            const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
+            const leftBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
+            const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
             modifyBankVertices(leftBank1Geometry, true); 
+            console.log('Post-modify check for leftBank1Geometry (UUID:', leftBank1Geometry.uuid, '):');
+            const firstVertexLX1 = leftBank1Geometry.attributes.position.getX(0);
+            const firstVertexLZ1 = leftBank1Geometry.attributes.position.getZ(0);
+            console.log('Sample vertex 0 (local X, Z):', firstVertexLX1, firstVertexLZ1);
+
             modifyBankVertices(rightBank1Geometry, false); 
+            console.log('Post-modify check for rightBank1Geometry (UUID:', rightBank1Geometry.uuid, '):');
+            const firstVertexRX1 = rightBank1Geometry.attributes.position.getX(0);
+            const firstVertexRZ1 = rightBank1Geometry.attributes.position.getZ(0);
+            console.log('Sample vertex 0 (local X, Z):', firstVertexRX1, firstVertexRZ1);
+
             const leftBank1 = new THREE.Mesh(leftBank1Geometry, bankMaterial);
             const rightBank1 = new THREE.Mesh(rightBank1Geometry, bankMaterial);
             leftBank1.rotation.x = -Math.PI / 2;
@@ -945,10 +965,20 @@ import { Water } from 'three/addons/objects/Water.js';
             scene.add(leftBank1); scene.add(rightBank1);
             leftBankMeshes.push(leftBank1); rightBankMeshes.push(rightBank1);
 
-            const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
-            const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 10, 40); 
+            const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
+            const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
             modifyBankVertices(leftBank2Geometry, true);
+            console.log('Post-modify check for leftBank2Geometry (UUID:', leftBank2Geometry.uuid, '):');
+            const firstVertexLX2 = leftBank2Geometry.attributes.position.getX(0);
+            const firstVertexLZ2 = leftBank2Geometry.attributes.position.getZ(0);
+            console.log('Sample vertex 0 (local X, Z):', firstVertexLX2, firstVertexLZ2);
+
             modifyBankVertices(rightBank2Geometry, false);
+            console.log('Post-modify check for rightBank2Geometry (UUID:', rightBank2Geometry.uuid, '):');
+            const firstVertexRX2 = rightBank2Geometry.attributes.position.getX(0);
+            const firstVertexRZ2 = rightBank2Geometry.attributes.position.getZ(0);
+            console.log('Sample vertex 0 (local X, Z):', firstVertexRX2, firstVertexRZ2);
+            
             const leftBank2 = new THREE.Mesh(leftBank2Geometry, bankMaterial);
             const rightBank2 = new THREE.Mesh(rightBank2Geometry, bankMaterial);
             leftBank2.rotation.x = -Math.PI / 2;
@@ -1148,10 +1178,10 @@ import { Water } from 'three/addons/objects/Water.js';
                 fish.rotation.x = rotationAngle;
                 const waterSurfaceYForFishSplash = water1 ? water1.position.y : -0.15;
                 if (fish.userData.previousY <= waterSurfaceYForFishSplash && fish.position.y > waterSurfaceYForFishSplash) {
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0);
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0, 1.0, 1.0);
                 }
                 else if (fish.userData.previousY > waterSurfaceYForFishSplash && fish.position.y <= waterSurfaceYForFishSplash) {
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0);
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0, 1.0, 1.0);
                 }
                 fish.userData.previousY = fish.position.y;
 
@@ -1224,17 +1254,17 @@ import { Water } from 'three/addons/objects/Water.js';
                     if (!obstacle.userData.lastWakeTime || (now - obstacle.userData.lastWakeTime > wakeCooldown)) {
                         // Frontal Splash
                         const frontSplashPos = new THREE.Vector3(obstacle.position.x, waterSurfaceY + 0.05, obstacle.position.z - obstacle.scale.z * 0.5);
-                        emitSplash(frontSplashPos, 1 + Math.floor(Math.random() * 2), 0.04, -Math.PI / 2, 1.0, 0.7); 
+                        emitSplash(frontSplashPos, 3 + Math.floor(Math.random() * 3), 0.05, -Math.PI / 2 + (Math.random() - 0.5) * 0.4, 1.0, 0.8, 1.75, 1.2);
 
                         // V-Shaped Rear Wake
                         const rearEmitterOffset = obstacle.scale.z * 0.3; 
                         const vSpreadAngle = Math.PI / 6; 
                         
                         const wakePos1 = new THREE.Vector3(obstacle.position.x - obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
-                        emitSplash(wakePos1, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 + vSpreadAngle, 1.0, 0.5); 
+                        emitSplash(wakePos1, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 + vSpreadAngle, 1.0, 0.5, 1.0, 1.0); 
                                                                                                         
                         const wakePos2 = new THREE.Vector3(obstacle.position.x + obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
-                        emitSplash(wakePos2, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 - vSpreadAngle, 1.0, 0.5);
+                        emitSplash(wakePos2, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 - vSpreadAngle, 1.0, 0.5, 1.0, 1.0);
                         
                         obstacle.userData.lastWakeTime = now;
                     }
@@ -1253,7 +1283,7 @@ import { Water } from 'three/addons/objects/Water.js';
                         waterYWake + 0.05, 
                         character.position.z + 0.7 
                     );
-                    emitSplash(rearWakePosition, 2 + Math.floor(Math.random() * 3), 0.03 + Math.random()*0.03, Math.PI / 2, 1.0, 0.6); 
+                    emitSplash(rearWakePosition, 2 + Math.floor(Math.random() * 3), 0.03 + Math.random()*0.03, Math.PI / 2, 1.0, 0.6, 1.0, 1.0); 
                     character.userData.lastRearWakeTime = now;
                 }
             }
