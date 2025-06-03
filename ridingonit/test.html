@@ -275,12 +275,12 @@ import { Water } from 'three/addons/objects/Water.js';
         console.log('Target Geometry UUID:', geometry.uuid);
         console.log('Parameters: WidthSegs:', geometry.parameters.widthSegments, 'HeightSegs:', geometry.parameters.heightSegments);
         console.log('Is Left Bank:', isLeftBank);
-        let minX = Infinity, maxX = -Infinity, minLocalZ = Infinity, maxLocalZ = -Infinity; // Renamed for clarity
+        let minX = Infinity, maxX = -Infinity, minLocalZ = Infinity, maxLocalZ = -Infinity; 
         let modifiedVertexCount = 0;
 
         const positions = geometry.attributes.position;
-        const widthSegments = geometry.parameters.widthSegments; // Should be 10 now
-        const depthSegments = geometry.parameters.heightSegments; // Should be 80
+        const widthSegments = geometry.parameters.widthSegments; 
+        const depthSegments = geometry.parameters.heightSegments; 
 
         const initialZOffset = 0.05; 
         const maxBankHeight = 0.75;  
@@ -290,28 +290,23 @@ import { Water } from 'three/addons/objects/Water.js';
         const randomSidewaysFactorBase = 0.05; 
         const randomSidewaysFactorWave = 0.1;  
 
-        for (let j = 0; j <= depthSegments; j++) { // Iterate along the length
-            for (let i = 0; i <= widthSegments; i++) { // Iterate across the width
+        for (let j = 0; j <= depthSegments; j++) { 
+            for (let i = 0; i <= widthSegments; i++) { 
                 const index = j * (widthSegments + 1) + i;
-                modifiedVertexCount++; // All vertices will be modified to form the slope
+                modifiedVertexCount++; 
 
                 let slopeFactor;
                 if (isLeftBank) {
-                    // For left bank, i=0 is outer land edge, i=widthSegments is water edge
                     slopeFactor = (widthSegments - i) / widthSegments; 
                 } else {
-                    // For right bank, i=0 is water edge, i=widthSegments is outer land edge
                     slopeFactor = i / widthSegments;
                 }
-                // Ensure slopeFactor is between 0 and 1
                 slopeFactor = Math.max(0, Math.min(1, slopeFactor));
 
-                // --- Local Z (Height) Modification ---
                 let currentLocalZ = initialZOffset + (slopeFactor * maxBankHeight);
                 currentLocalZ += (Math.random() - 0.5) * randomHeightFactor;
                 positions.setZ(index, currentLocalZ);
 
-                // --- Local X (Sideways) Modification ---
                 let originalLocalX = positions.getX(index); 
                 let currentLocalX = originalLocalX;
 
@@ -906,14 +901,14 @@ import { Water } from 'three/addons/objects/Water.js';
 
             forestMesh1 = new THREE.Mesh(planeGeometry, planeMaterial);
             forestMesh1.rotation.x = -Math.PI / 2;
-            forestMesh1.position.y = -0.5;
+            forestMesh1.position.y = 0.6; 
             forestMesh1.position.z = -forestLength / 2 + 50;
             forestMesh1.receiveShadow = true;
             scene.add(forestMesh1);
 
             forestMesh2 = new THREE.Mesh(planeGeometry.clone(), planeMaterial.clone());
             forestMesh2.rotation.x = -Math.PI / 2;
-            forestMesh2.position.y = -0.5;
+            forestMesh2.position.y = 0.6; 
             forestMesh2.position.z = forestMesh1.position.z - forestLength;
             forestMesh2.receiveShadow = true;
             scene.add(forestMesh2);
@@ -923,10 +918,10 @@ import { Water } from 'three/addons/objects/Water.js';
             const placeholderGeo = new THREE.PlaneGeometry(300, forestLength);
             const placeholderMat = new THREE.MeshStandardMaterial({ color: 0x335522 });
             forestMesh1 = new THREE.Mesh(placeholderGeo, placeholderMat);
-            forestMesh1.rotation.x = -Math.PI / 2; forestMesh1.position.y = -0.5;
+            forestMesh1.rotation.x = -Math.PI / 2; forestMesh1.position.y = 0.6; 
             forestMesh1.position.z = -forestLength/2 + 50; scene.add(forestMesh1);
             forestMesh2 = new THREE.Mesh(placeholderGeo.clone(), placeholderMat.clone());
-            forestMesh2.rotation.x = -Math.PI/2; forestMesh2.position.y = -0.5;
+            forestMesh2.rotation.x = -Math.PI/2; forestMesh2.position.y = 0.6; 
             forestMesh2.position.z = forestMesh1.position.z - forestLength; scene.add(forestMesh2);
             console.log("Placeholder terrain planes added.");
         }
