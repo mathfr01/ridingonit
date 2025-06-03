@@ -273,27 +273,32 @@ import { Water } from 'three/addons/objects/Water.js';
       function modifyBankVertices(geometry, isLeftBank) {
           console.log('--- Modifying bank START ---');
           console.log('Target Geometry UUID:', geometry.uuid);
-          console.log('Parameters: WidthSegs:', geometry.parameters.widthSegments, 'HeightSegs:', geometry.parameters.heightSegments); 
+          console.log('Parameters: WidthSegs:', geometry.parameters.widthSegments, 'HeightSegs:', geometry.parameters.heightSegments);
           console.log('Is Left Bank:', isLeftBank);
           let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+          let modifiedVertexCount = 0; 
 
           const positions = geometry.attributes.position;
           const widthSegments = geometry.parameters.widthSegments;
-          const depthSegments = geometry.parameters.depthSegments; 
+          const depthSegments = geometry.parameters.heightSegments; // This is 'heightSegments' for PlaneGeometry
 
           for (let j = 0; j <= depthSegments; j++) { 
               for (let i = 0; i <= widthSegments; i++) { 
                   const index = j * (widthSegments + 1) + i;
-                  
-                  let isOuterEdgeVertex = false;
-                  if (isLeftBank && i === 0) { 
-                      isOuterEdgeVertex = true;
-                  } else if (!isLeftBank && i === widthSegments) { 
-                      isOuterEdgeVertex = true;
-                  }
+                  let shouldModifyThisVertex = false;
 
-                  if (isOuterEdgeVertex) {
-                      let currentLocalZ = positions.getZ(index); 
+                  if (isLeftBank && i === 0) {
+                      shouldModifyThisVertex = true;
+                  } else if (!isLeftBank && i === widthSegments) {
+                      shouldModifyThisVertex = true;
+                  }
+                  
+                  // Inserted diagnostic log line
+                  console.log(`Bank Debug: j=${j}, i=${i}, idx=${index}, wSegs=${widthSegments}, isLeft=${isLeftBank}, shouldModify=${shouldModifyThisVertex}`);
+
+                  if (shouldModifyThisVertex) {
+                      modifiedVertexCount++; 
+                      let currentLocalZ = positions.getZ(index);
                       currentLocalZ += (Math.random() - 0.5) * 5.0; 
                       positions.setZ(index, currentLocalZ);
 
@@ -310,12 +315,18 @@ import { Water } from 'three/addons/objects/Water.js';
                   }
               }
           }
-          
+
+          console.log('Total vertices modified:', modifiedVertexCount); 
           console.log('Modified vertex ranges (local X):', minX, 'to', maxX);
           console.log('Modified vertex ranges (local Z - height):', minZ, 'to', maxZ);
           console.log('--- Modifying bank END for:', geometry.uuid, '---');
-          positions.needsUpdate = true;
-          geometry.computeVertexNormals();
+
+          if (modifiedVertexCount > 0) { 
+              positions.needsUpdate = true;
+              geometry.computeVertexNormals();
+          } else {
+              console.warn('No vertices were modified for geometry UUID:', geometry.uuid);
+          }
       }
 
     function initSky() {
@@ -560,12 +571,12 @@ import { Water } from 'three/addons/objects/Water.js';
                    p.sprite.position.addScaledVector(p.velocity, delta * 20); 
                    p.velocity.y -= p.gravity * delta * 20; 
 
-                   const lifeRatio = Math.max(0, p.life / (1.0 + 0.5)); // Original base lifetime was 1.0 to 1.5
+                   const lifeRatio = Math.max(0, p.life / (1.0 + 0.5)); 
                    p.sprite.material.opacity = Math.max(0, lifeRatio * 0.8);
                    
                    let currentScale = p.sprite.scale.x;
                    currentScale += p.scaleSpeed * delta * 10; 
-                   currentScale = Math.min(currentScale, p.maxScale * (p.sprite.scale.x / p.initialScale)); // Adjust max scale if initial was multiplied
+                   currentScale = Math.min(currentScale, p.maxScale * (p.sprite.scale.x / p.initialScale)); 
                    p.sprite.scale.set(currentScale, currentScale, currentScale);
                }
            }
@@ -1249,24 +1260,28 @@ import { Water } from 'three/addons/objects/Water.js';
                 if (Math.abs(rockBaseApproxY - waterSurfaceY) < 0.3 && obstacle.position.z < (character ? character.position.z : 0) + 10 && obstacle.position.z > (character ? character.position.z : 0) - 70) { 
                     obstacle.userData = obstacle.userData || {};
                     const now = performance.now();
-                    const wakeCooldown = 100 + Math.random() * 100; 
-
-                    if (!obstacle.userData.lastWakeTime || (now - obstacle.userData.lastWakeTime > wakeCooldown)) {
-                        // Frontal Splash
+                    
+                    // --- Frontal Splash Logic ---
+                    const frontSplashCooldown = 120 + Math.random() * 100; 
+                    if (!obstacle.userData.lastFrontSplashTime || (now - obstacle.userData.lastFrontSplashTime > frontSplashCooldown)) {
                         const frontSplashPos = new THREE.Vector3(obstacle.position.x, waterSurfaceY + 0.05, obstacle.position.z - obstacle.scale.z * 0.5);
                         emitSplash(frontSplashPos, 3 + Math.floor(Math.random() * 3), 0.05, -Math.PI / 2 + (Math.random() - 0.5) * 0.4, 1.0, 0.8, 1.75, 1.2);
+                        obstacle.userData.lastFrontSplashTime = now;
+                    }
 
-                        // V-Shaped Rear Wake
+                    // --- V-Shaped Rear Wake Logic ---
+                    const rearWakeCooldown = 100 + Math.random() * 100; 
+                    if (!obstacle.userData.lastRearWakeTime || (now - obstacle.userData.lastRearWakeTime > rearWakeCooldown)) { 
                         const rearEmitterOffset = obstacle.scale.z * 0.3; 
                         const vSpreadAngle = Math.PI / 6; 
                         
                         const wakePos1 = new THREE.Vector3(obstacle.position.x - obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
                         emitSplash(wakePos1, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 + vSpreadAngle, 1.0, 0.5, 1.0, 1.0); 
-                                                                                                        
+                                                                                                                
                         const wakePos2 = new THREE.Vector3(obstacle.position.x + obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
                         emitSplash(wakePos2, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 - vSpreadAngle, 1.0, 0.5, 1.0, 1.0);
                         
-                        obstacle.userData.lastWakeTime = now;
+                        obstacle.userData.lastRearWakeTime = now; 
                     }
                 }
             }
