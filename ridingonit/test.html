@@ -271,18 +271,18 @@ import { Water } from 'three/addons/objects/Water.js';
     let particleSystemContainer; 
 
       function modifyBankVertices(geometry, isLeftBank) {
-          console.log('Modifying bank vertices for:', isLeftBank ? 'Left Bank' : 'Right Bank', 'ID:', geometry.uuid); // Added
+          console.log('Modifying bank vertices for:', isLeftBank ? 'Left Bank' : 'Right Bank', 'ID:', geometry.uuid);
           const positions = geometry.attributes.position;
-          // const widthSegments = geometry.parameters.widthSegments; // Original, to be commented
-          // const depthSegments = geometry.parameters.depthSegments; // Original, to be commented
-          // const halfWidth = geometry.parameters.width / 2; // Original, to be commented
+          const widthSegments = geometry.parameters.widthSegments;
+          const depthSegments = geometry.parameters.depthSegments; // This is 'heightSegments' for PlaneGeometry
 
-          /* // Original loops to be commented out
-          for (let j = 0; j <= depthSegments; j++) { 
-              for (let i = 0; i <= widthSegments; i++) { 
+          for (let j = 0; j <= depthSegments; j++) { // Iterate along the length (local Y direction of PlaneGeometry)
+              for (let i = 0; i <= widthSegments; i++) { // Iterate across the width (local X direction of PlaneGeometry)
                   const index = j * (widthSegments + 1) + i;
                   
                   let isOuterEdgeVertex = false;
+                  // Outer edge for left bank is i=0 (local -X side)
+                  // Outer edge for right bank is i=widthSegments (local +X side)
                   if (isLeftBank && i === 0) { 
                       isOuterEdgeVertex = true;
                   } else if (!isLeftBank && i === widthSegments) { 
@@ -290,25 +290,17 @@ import { Water } from 'three/addons/objects/Water.js';
                   }
 
                   if (isOuterEdgeVertex) {
-                      let currentLocalY = positions.getY(index);
-                      currentLocalY += (Math.random() - 0.5) * 5.0; 
-                      positions.setY(index, currentLocalY);
+                      // Modify local Z for height variation (this becomes world Y after rotation)
+                      let currentLocalZ = positions.getZ(index); // Should be 0 for a new PlaneGeometry
+                      currentLocalZ += (Math.random() - 0.5) * 0.8; // Vary height by +/- 0.4 units
+                      positions.setZ(index, currentLocalZ);
 
+                      // Modify local X for jaggedness along the river bank edge
                       let currentLocalX = positions.getX(index);
-                      currentLocalX += (Math.random() - 0.5) * 2.0; 
+                      currentLocalX += (Math.random() - 0.5) * 0.3; // Vary local X by +/- 0.15 units
                       positions.setX(index, currentLocalX);
                   }
               }
-          }
-          */ // End of original loops comment
-
-          // New Universal Test Logic:
-          if (positions.count > 0) {
-              let originalY = positions.getY(0);
-              positions.setY(0, 20.0); // Set local Y of vertex 0 to an absolute high value
-              console.log(`Bank ${geometry.uuid}: Set vertex 0 original Y: ${originalY}, new Y: ${positions.getY(0)}`);
-          } else {
-              console.log(`Bank ${geometry.uuid}: No vertices found (count is 0).`);
           }
           
           positions.needsUpdate = true;
@@ -1072,8 +1064,8 @@ import { Water } from 'three/addons/objects/Water.js';
     function updateCamera() {
         if (!character || !camera) return;
         const desiredX = character.position.x;
-        const desiredY = character.position.y + 1.2;
-        const desiredZ = character.position.z + 1.7;
+        const desiredY = character.position.y + 1.0;
+        const desiredZ = character.position.z + 1.5;
         camera.position.x = desiredX;
         camera.position.y = desiredY;
         camera.position.z = desiredZ;
