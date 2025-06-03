@@ -320,7 +320,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 for (let i = 0; i < numTrees; i++) {
                     const tree = treeModel.clone();
                     const side = (i % 2 === 0) ? -1 : 1; // -1 for left, 1 for right
-                    const xPos = side * (7 + 5 + Math.random() * 60); 
+                    const xPos = side * (7 + 1 + Math.random() * 15); 
                     const zPos = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
 
                     tree.position.set(
@@ -362,7 +362,7 @@ import { Water } from 'three/addons/objects/Water.js';
         bladeGeometry.translate(0, 0.5, 0); // Pivot at base center
 
         const totalPatches = 500; // Number of large grass patches
-        const instancesPerPatch = 100; // Number of blades per patch
+        const instancesPerPatch = 150; // Number of blades per patch
 
         const dummy = new THREE.Object3D(); // Used for instance transforms
 
@@ -372,7 +372,7 @@ import { Water } from 'three/addons/objects/Water.js';
             patchMesh.receiveShadow = true;
 
             const side = (i % 2 === 0) ? -1 : 1;
-            const patchX = side * (7 + 2 + Math.random() * 30); // River edge (7), margin (2), spread (60)
+            const patchX = side * (7 + 0.5 + Math.random() * 10); // River edge (7), margin (2), spread (60)
             const patchZ = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
             
             patchMesh.position.set(
@@ -864,13 +864,13 @@ import { Water } from 'three/addons/objects/Water.js';
                 // Left edge vertex (local -X side of the plane)
                 const leftEdgeIndex = j * (widthSegments + 1);
                 let xLeft = waterPlaneGeometry.attributes.position.getX(leftEdgeIndex);
-                xLeft += (Math.random() - 0.5) * 3.5; // Increased magnitude significantly
+                xLeft += (Math.random() - 0.5) * 8.0; // Increased magnitude significantly
                 waterPlaneGeometry.attributes.position.setX(leftEdgeIndex, xLeft);
 
                 // Right edge vertex (local +X side of the plane)
                 const rightEdgeIndex = j * (widthSegments + 1) + widthSegments;
                 let xRight = waterPlaneGeometry.attributes.position.getX(rightEdgeIndex);
-                xRight += (Math.random() - 0.5) * 3.5; // Increased magnitude significantly
+                xRight += (Math.random() - 0.5) * 8.0; // Increased magnitude significantly
                 waterPlaneGeometry.attributes.position.setX(rightEdgeIndex, xRight);
             }
             waterPlaneGeometry.attributes.position.needsUpdate = true;
@@ -934,13 +934,14 @@ import { Water } from 'three/addons/objects/Water.js';
             console.log("Rock model loaded.");
             for (let i = 0; i < 15; i++) {
                 const obstacle = gltf.scene.clone();
-                const baseScale = 0.08 + Math.random() * 0.42; // Rocks will be smaller on average: 0.08 to 0.2
+                const baseScale = 0.08 + Math.random() * 0.12; // Rocks will be smaller on average: 0.08 to 0.2
                 const yScale = baseScale * (0.7 + Math.random() * 0.6); // Y scale can be 70% to 130% of baseScale
                 obstacle.scale.set(baseScale, yScale, baseScale);
                 obstacle.rotation.y = Math.random() * Math.PI * 2;
                 obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.15, -20 - i * 20); // Lowered rocks
-                obstacle.position.y = Math.max(obstacle.position.y, -0.15); // Ensure Y is not below water level
                 obstacle.traverse(node => { if (node.isMesh) node.castShadow = true; });
+                obstacle.receiveShadow = true; // Ensure rocks receive shadows
+                obstacle.castShadow = true; // Ensure rocks cast shadows
                 obstacles.push(obstacle);
                 scene.add(obstacle);
             }
