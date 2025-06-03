@@ -270,64 +270,84 @@ import { Water } from 'three/addons/objects/Water.js';
     const maxParticles = 100; 
     let particleSystemContainer; 
 
-      function modifyBankVertices(geometry, isLeftBank) {
-          console.log('--- Modifying bank START ---');
-          console.log('Target Geometry UUID:', geometry.uuid);
-          console.log('Parameters: WidthSegs:', geometry.parameters.widthSegments, 'HeightSegs:', geometry.parameters.heightSegments);
-          console.log('Is Left Bank:', isLeftBank);
-          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-          let modifiedVertexCount = 0; 
+    function modifyBankVertices(geometry, isLeftBank) {
+        console.log('--- Modifying bank START (for sloping) ---');
+        console.log('Target Geometry UUID:', geometry.uuid);
+        console.log('Parameters: WidthSegs:', geometry.parameters.widthSegments, 'HeightSegs:', geometry.parameters.heightSegments);
+        console.log('Is Left Bank:', isLeftBank);
+        let minX = Infinity, maxX = -Infinity, minLocalZ = Infinity, maxLocalZ = -Infinity; // Renamed for clarity
+        let modifiedVertexCount = 0;
 
-          const positions = geometry.attributes.position;
-          const widthSegments = geometry.parameters.widthSegments;
-          const depthSegments = geometry.parameters.heightSegments; // This is 'heightSegments' for PlaneGeometry
+        const positions = geometry.attributes.position;
+        const widthSegments = geometry.parameters.widthSegments; // Should be 10 now
+        const depthSegments = geometry.parameters.heightSegments; // Should be 80
 
-          for (let j = 0; j <= depthSegments; j++) { 
-              for (let i = 0; i <= widthSegments; i++) { 
-                  const index = j * (widthSegments + 1) + i;
-                  let shouldModifyThisVertex = false;
+        const initialZOffset = 0.05; 
+        const maxBankHeight = 0.75;  
+        const randomHeightFactor = 0.15; 
 
-                  if (isLeftBank && i === 0) {
-                      shouldModifyThisVertex = true;
-                  } else if (!isLeftBank && i === widthSegments) {
-                      shouldModifyThisVertex = true;
-                  }
-                  
-                  // Inserted diagnostic log line
-                  console.log(`Bank Debug: j=${j}, i=${i}, idx=${index}, wSegs=${widthSegments}, isLeft=${isLeftBank}, shouldModify=${shouldModifyThisVertex}`);
+        const outwardPushFactor = 0.25; 
+        const randomSidewaysFactorBase = 0.05; 
+        const randomSidewaysFactorWave = 0.1;  
 
-                  if (shouldModifyThisVertex) {
-                      modifiedVertexCount++; 
-                      let currentLocalZ = positions.getZ(index);
-                      currentLocalZ += (Math.random() - 0.5) * 5.0; 
-                      positions.setZ(index, currentLocalZ);
+        for (let j = 0; j <= depthSegments; j++) { // Iterate along the length
+            for (let i = 0; i <= widthSegments; i++) { // Iterate across the width
+                const index = j * (widthSegments + 1) + i;
+                modifiedVertexCount++; // All vertices will be modified to form the slope
 
-                      let currentLocalX = positions.getX(index);
-                      currentLocalX += Math.sin(j * 0.15) * 1.2 + (Math.random() - 0.5) * 1.0; 
-                      positions.setX(index, currentLocalX);
-                      
-                      let xVal = positions.getX(index);
-                      let zVal = positions.getZ(index);
-                      if (xVal < minX) minX = xVal;
-                      if (xVal > maxX) maxX = xVal;
-                      if (zVal < minZ) minZ = zVal;
-                      if (zVal > maxZ) maxZ = zVal;
-                  }
-              }
-          }
+                let slopeFactor;
+                if (isLeftBank) {
+                    // For left bank, i=0 is outer land edge, i=widthSegments is water edge
+                    slopeFactor = (widthSegments - i) / widthSegments; 
+                } else {
+                    // For right bank, i=0 is water edge, i=widthSegments is outer land edge
+                    slopeFactor = i / widthSegments;
+                }
+                // Ensure slopeFactor is between 0 and 1
+                slopeFactor = Math.max(0, Math.min(1, slopeFactor));
 
-          console.log('Total vertices modified:', modifiedVertexCount); 
-          console.log('Modified vertex ranges (local X):', minX, 'to', maxX);
-          console.log('Modified vertex ranges (local Z - height):', minZ, 'to', maxZ);
-          console.log('--- Modifying bank END for:', geometry.uuid, '---');
+                // --- Local Z (Height) Modification ---
+                let currentLocalZ = initialZOffset + (slopeFactor * maxBankHeight);
+                currentLocalZ += (Math.random() - 0.5) * randomHeightFactor;
+                positions.setZ(index, currentLocalZ);
 
-          if (modifiedVertexCount > 0) { 
-              positions.needsUpdate = true;
-              geometry.computeVertexNormals();
-          } else {
-              console.warn('No vertices were modified for geometry UUID:', geometry.uuid);
-          }
-      }
+                // --- Local X (Sideways) Modification ---
+                let originalLocalX = positions.getX(index); 
+                let currentLocalX = originalLocalX;
+
+                let lengthWiseRandom = (Math.sin(j * 0.15) * randomSidewaysFactorWave + (Math.random() - 0.5) * randomSidewaysFactorBase) * slopeFactor;
+                currentLocalX += lengthWiseRandom;
+
+                if (isLeftBank) { 
+                    currentLocalX -= slopeFactor * outwardPushFactor; 
+                } else { 
+                    currentLocalX += slopeFactor * outwardPushFactor; 
+                }
+                positions.setX(index, currentLocalX);
+                
+                if (i === 0 || i === widthSegments) { 
+                     console.log(`Bank Debug: j=${j}, i=${i}, slope=${slopeFactor.toFixed(2)}, origX=${originalLocalX.toFixed(2)}, newX=${currentLocalX.toFixed(2)}, newZ=${currentLocalZ.toFixed(2)}`);
+                }
+
+                if (currentLocalX < minX) minX = currentLocalX;
+                if (currentLocalX > maxX) maxX = currentLocalX;
+                if (currentLocalZ < minLocalZ) minLocalZ = currentLocalZ;
+                if (currentLocalZ > maxLocalZ) maxLocalZ = currentLocalZ;
+            }
+        }
+
+        console.log('Total vertices processed for slope:', modifiedVertexCount);
+        console.log('Modified vertex ranges (local X):', minX.toFixed(2), 'to', maxX.toFixed(2));
+        console.log('Modified vertex ranges (local Z - height):', minLocalZ.toFixed(2), 'to', maxLocalZ.toFixed(2));
+        console.log('--- Modifying bank END (for sloping) for:', geometry.uuid, '---');
+
+        if (modifiedVertexCount > 0) {
+            positions.needsUpdate = true;
+            geometry.computeVertexNormals();
+        } else {
+            console.warn('No vertices were modified for slope for geometry UUID:', geometry.uuid);
+        }
+    }
 
     function initSky() {
         console.log("initSky function called.");
@@ -952,8 +972,8 @@ import { Water } from 'three/addons/objects/Water.js';
 
             const bankMaterial = new THREE.MeshStandardMaterial({ color: 0x6B4423, side: THREE.DoubleSide }); 
 
-            const leftBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
-            const rightBank1Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
+            const leftBank1Geometry = new THREE.PlaneGeometry(1, waterLength, 10, 80); 
+            const rightBank1Geometry = new THREE.PlaneGeometry(1, waterLength, 10, 80); 
             modifyBankVertices(leftBank1Geometry, true); 
             console.log('Post-modify check for leftBank1Geometry (UUID:', leftBank1Geometry.uuid, '):');
             const firstVertexLX1 = leftBank1Geometry.attributes.position.getX(0);
@@ -969,15 +989,15 @@ import { Water } from 'three/addons/objects/Water.js';
             const leftBank1 = new THREE.Mesh(leftBank1Geometry, bankMaterial);
             const rightBank1 = new THREE.Mesh(rightBank1Geometry, bankMaterial);
             leftBank1.rotation.x = -Math.PI / 2;
-            leftBank1.position.set(-6, water1.position.y - 0.05, water1.position.z);
+            leftBank1.position.set(-5.5, water1.position.y - 0.05, water1.position.z); 
             rightBank1.rotation.x = -Math.PI / 2;
-            rightBank1.position.set(6, water1.position.y - 0.05, water1.position.z);
+            rightBank1.position.set(5.5, water1.position.y - 0.05, water1.position.z);  
             leftBank1.receiveShadow = true; rightBank1.receiveShadow = true;
             scene.add(leftBank1); scene.add(rightBank1);
             leftBankMeshes.push(leftBank1); rightBankMeshes.push(rightBank1);
 
-            const leftBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
-            const rightBank2Geometry = new THREE.PlaneGeometry(2, waterLength, 20, 80); 
+            const leftBank2Geometry = new THREE.PlaneGeometry(1, waterLength, 10, 80); 
+            const rightBank2Geometry = new THREE.PlaneGeometry(1, waterLength, 10, 80); 
             modifyBankVertices(leftBank2Geometry, true);
             console.log('Post-modify check for leftBank2Geometry (UUID:', leftBank2Geometry.uuid, '):');
             const firstVertexLX2 = leftBank2Geometry.attributes.position.getX(0);
@@ -993,9 +1013,9 @@ import { Water } from 'three/addons/objects/Water.js';
             const leftBank2 = new THREE.Mesh(leftBank2Geometry, bankMaterial);
             const rightBank2 = new THREE.Mesh(rightBank2Geometry, bankMaterial);
             leftBank2.rotation.x = -Math.PI / 2;
-            leftBank2.position.set(-6, water2.position.y - 0.05, water2.position.z);
+            leftBank2.position.set(-5.5, water2.position.y - 0.05, water2.position.z); 
             rightBank2.rotation.x = -Math.PI / 2;
-            rightBank2.position.set(6, water2.position.y - 0.05, water2.position.z);
+            rightBank2.position.set(5.5, water2.position.y - 0.05, water2.position.z);  
             leftBank2.receiveShadow = true; rightBank2.receiveShadow = true;
             scene.add(leftBank2); scene.add(rightBank2);
             leftBankMeshes.push(leftBank2); rightBankMeshes.push(rightBank2);
