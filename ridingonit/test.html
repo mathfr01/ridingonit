@@ -943,7 +943,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
             leftForestMesh1 = new THREE.Mesh(sideTerrainGeometry, planeMaterial);
             leftForestMesh1.rotation.x = -Math.PI / 2;
-            leftForestMesh1.position.y = 0.6; 
+            leftForestMesh1.position.y = -2.1; 
             leftForestMesh1.position.x = -6 - (sideTerrainWidth / 2); 
             leftForestMesh1.position.z = -forestLength / 2 + 50;
             leftForestMesh1.receiveShadow = true;
@@ -951,7 +951,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
             rightForestMesh1 = new THREE.Mesh(sideTerrainGeometry.clone(), planeMaterial.clone()); 
             rightForestMesh1.rotation.x = -Math.PI / 2;
-            rightForestMesh1.position.y = 0.6;
+            rightForestMesh1.position.y = -2.1;
             rightForestMesh1.position.x = 6 + (sideTerrainWidth / 2);  
             rightForestMesh1.position.z = -forestLength / 2 + 50;
             rightForestMesh1.receiveShadow = true;
@@ -959,7 +959,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
             leftForestMesh2 = new THREE.Mesh(sideTerrainGeometry.clone(), planeMaterial.clone());
             leftForestMesh2.rotation.x = -Math.PI / 2;
-            leftForestMesh2.position.y = 0.6;
+            leftForestMesh2.position.y = -2.1;
             leftForestMesh2.position.x = -6 - (sideTerrainWidth / 2);
             leftForestMesh2.position.z = leftForestMesh1.position.z - forestLength;
             leftForestMesh2.receiveShadow = true;
@@ -967,7 +967,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
             rightForestMesh2 = new THREE.Mesh(sideTerrainGeometry.clone(), planeMaterial.clone());
             rightForestMesh2.rotation.x = -Math.PI / 2;
-            rightForestMesh2.position.y = 0.6;
+            rightForestMesh2.position.y = -2.1;
             rightForestMesh2.position.x = 6 + (sideTerrainWidth / 2);
             rightForestMesh2.position.z = rightForestMesh1.position.z - forestLength;
             rightForestMesh2.receiveShadow = true;
@@ -981,22 +981,26 @@ import { Water } from 'three/addons/objects/Water.js';
             const placeholderMat = new THREE.MeshStandardMaterial({ color: 0x335522 });
             
             leftForestMesh1 = new THREE.Mesh(placeholderSideGeo, placeholderMat);
-            leftForestMesh1.rotation.x = -Math.PI / 2; leftForestMesh1.position.y = 0.6;
+            leftForestMesh1.rotation.x = -Math.PI / 2; 
+            leftForestMesh1.position.y = -2.1;
             leftForestMesh1.position.x = -6 - (sideTerrainWidth / 2);
             leftForestMesh1.position.z = -forestLength/2 + 50; scene.add(leftForestMesh1);
 
             rightForestMesh1 = new THREE.Mesh(placeholderSideGeo.clone(), placeholderMat.clone());
-            rightForestMesh1.rotation.x = -Math.PI / 2; rightForestMesh1.position.y = 0.6;
+            rightForestMesh1.rotation.x = -Math.PI / 2; 
+            rightForestMesh1.position.y = -2.1;
             rightForestMesh1.position.x = 6 + (sideTerrainWidth / 2);
             rightForestMesh1.position.z = -forestLength/2 + 50; scene.add(rightForestMesh1);
             
             leftForestMesh2 = new THREE.Mesh(placeholderSideGeo.clone(), placeholderMat.clone());
-            leftForestMesh2.rotation.x = -Math.PI / 2; leftForestMesh2.position.y = 0.6;
+            leftForestMesh2.rotation.x = -Math.PI / 2; 
+            leftForestMesh2.position.y = -2.1;
             leftForestMesh2.position.x = -6 - (sideTerrainWidth / 2);
             leftForestMesh2.position.z = leftForestMesh1.position.z - forestLength; scene.add(leftForestMesh2);
 
             rightForestMesh2 = new THREE.Mesh(placeholderSideGeo.clone(), placeholderMat.clone());
-            rightForestMesh2.rotation.x = -Math.PI / 2; rightForestMesh2.position.y = 0.6;
+            rightForestMesh2.rotation.x = -Math.PI / 2; 
+            rightForestMesh2.position.y = -2.1;
             rightForestMesh2.position.x = 6 + (sideTerrainWidth / 2);
             rightForestMesh2.position.z = rightForestMesh1.position.z - forestLength; scene.add(rightForestMesh2);
             
@@ -1590,4 +1594,3 @@ import { Water } from 'three/addons/objects/Water.js';
 </body>
 </html>
 
-[end of ridingonit/test.html]
