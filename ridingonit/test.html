@@ -315,7 +315,7 @@ import { Water } from 'three/addons/objects/Water.js';
             function(gltf) {
                 console.log("Pine tree model loaded.");
                 const treeModel = gltf.scene;
-                const numTrees = 100; // Number of trees for recycling pool
+                const numTrees = 500; // Number of trees for recycling pool
 
                 for (let i = 0; i < numTrees; i++) {
                     const tree = treeModel.clone();
@@ -361,8 +361,8 @@ import { Water } from 'three/addons/objects/Water.js';
         const bladeGeometry = new THREE.PlaneGeometry(0.1, 1, 1, 4); // A single grass blade
         bladeGeometry.translate(0, 0.5, 0); // Pivot at base center
 
-        const totalPatches = 50; // Number of large grass patches
-        const instancesPerPatch = 150; // Number of blades per patch
+        const totalPatches = 500; // Number of large grass patches
+        const instancesPerPatch = 100; // Number of blades per patch
 
         const dummy = new THREE.Object3D(); // Used for instance transforms
 
@@ -372,7 +372,7 @@ import { Water } from 'three/addons/objects/Water.js';
             patchMesh.receiveShadow = true;
 
             const side = (i % 2 === 0) ? -1 : 1;
-            const patchX = side * (7 + 2 + Math.random() * 60); // River edge (7), margin (2), spread (60)
+            const patchX = side * (7 + 2 + Math.random() * 30); // River edge (7), margin (2), spread (60)
             const patchZ = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
             
             patchMesh.position.set(
@@ -863,17 +863,17 @@ import { Water } from 'three/addons/objects/Water.js';
             for (let j = 0; j <= depthSegments; j++) { // Iterate along the length of the river (Y-axis of the geometry)
                 // Left edge vertex (local -X side of the plane)
                 const leftEdgeIndex = j * (widthSegments + 1);
-                let xLeft = positions.getX(leftEdgeIndex);
-                xLeft += (Math.random() - 0.5) * 2.5; // Increased magnitude significantly
-                positions.setX(leftEdgeIndex, xLeft);
+                let xLeft = waterPlaneGeometry.attributes.position.getX(leftEdgeIndex);
+                xLeft += (Math.random() - 0.5) * 3.5; // Increased magnitude significantly
+                waterPlaneGeometry.attributes.position.setX(leftEdgeIndex, xLeft);
 
                 // Right edge vertex (local +X side of the plane)
                 const rightEdgeIndex = j * (widthSegments + 1) + widthSegments;
-                let xRight = positions.getX(rightEdgeIndex);
-                xRight += (Math.random() - 0.5) * 2.5; // Increased magnitude significantly
-                positions.setX(rightEdgeIndex, xRight);
+                let xRight = waterPlaneGeometry.attributes.position.getX(rightEdgeIndex);
+                xRight += (Math.random() - 0.5) * 3.5; // Increased magnitude significantly
+                waterPlaneGeometry.attributes.position.setX(rightEdgeIndex, xRight);
             }
-            positions.needsUpdate = true;
+            waterPlaneGeometry.attributes.position.needsUpdate = true;
             waterPlaneGeometry.computeVertexNormals(); // Recalculate normals
             console.log("WaterPlaneGeometry modification complete. NeedsUpdate and computeVertexNormals called.");
 
@@ -934,8 +934,12 @@ import { Water } from 'three/addons/objects/Water.js';
             console.log("Rock model loaded.");
             for (let i = 0; i < 15; i++) {
                 const obstacle = gltf.scene.clone();
-                obstacle.scale.set(0.15,0.15,0.15);
+                const baseScale = 0.08 + Math.random() * 0.42; // Rocks will be smaller on average: 0.08 to 0.2
+                const yScale = baseScale * (0.7 + Math.random() * 0.6); // Y scale can be 70% to 130% of baseScale
+                obstacle.scale.set(baseScale, yScale, baseScale);
+                obstacle.rotation.y = Math.random() * Math.PI * 2;
                 obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.15, -20 - i * 20); // Lowered rocks
+                obstacle.position.y = Math.max(obstacle.position.y, -0.15); // Ensure Y is not below water level
                 obstacle.traverse(node => { if (node.isMesh) node.castShadow = true; });
                 obstacles.push(obstacle);
                 scene.add(obstacle);
@@ -1089,12 +1093,23 @@ import { Water } from 'three/addons/objects/Water.js';
                 fish.position.z += speed; 
 
                 if (fish.userData === undefined) fish.userData = {};
+                fish.userData.previousY = fish.userData.previousY === undefined ? (water1 ? water1.position.y : -0.15) : fish.userData.previousY;
                 fish.userData.jumpTime = (fish.userData.jumpTime || 0) + fishJumpFrequency;
 
                 fish.position.y = -0.7 + Math.max(0, Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * fishJumpHeight);
 
                 const rotationAngle = Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * Math.PI;
                 fish.rotation.x = rotationAngle;
+                const waterSurfaceYForFishSplash = water1 ? water1.position.y : -0.15;
+                // Check for exiting water
+                if (fish.userData.previousY <= waterSurfaceYForFishSplash && fish.position.y > waterSurfaceYForFishSplash) {
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02);
+                }
+                // Check for re-entering water
+                else if (fish.userData.previousY > waterSurfaceYForFishSplash && fish.position.y <= waterSurfaceYForFishSplash) {
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02);
+                }
+                fish.userData.previousY = fish.position.y;
 
                 if (character && fish.position.z > character.position.z + 20) {
                     const laneIndex = Math.floor(Math.random() * lanePositions.length);
@@ -1169,7 +1184,7 @@ import { Water } from 'three/addons/objects/Water.js';
                         obstacle.userData = obstacle.userData || {};
                         const now = performance.now();
                         if (!obstacle.userData.lastSplashTime || (now - obstacle.userData.lastSplashTime > 500 + Math.random() * 500)) { 
-                            const splashPos = new THREE.Vector3(obstacle.position.x, waterY + 0.1, obstacle.position.z);
+                            const splashPos = new THREE.Vector3(obstacle.position.x, waterY + 0.1, obstacle.position.z - 0.1);
                             emitSplash(splashPos, 3 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.05); 
                             obstacle.userData.lastSplashTime = now;
                        }
