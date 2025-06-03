@@ -103,23 +103,23 @@ import { Water } from 'three/addons/objects/Water.js';
 
     console.log("Script module parsing started. Version 13 (Full Integration Test).");
 
-    let scene, camera, renderer, character, sky, sun, water1, water2, fillLight, directionalLight, gltfLoader; // Consolidated and added gltfLoader
+    let scene, camera, renderer, character, sky, sun, water1, water2, fillLight, directionalLight, gltfLoader; 
     let obstacles = [];
     let nuggets = [];
     let trees = [];
-    let fishes = []; // This remains
+    let fishes = []; 
     let grasss = [];
     let leftBankMeshes = [];
     let rightBankMeshes = [];
-    let forestMesh1, forestMesh2; // For dual plane terrain looping
-    const forestLength = 600; // Length of one terrain/water segment
-    const waterLength = 600;  // Length of one water segment
+    let leftForestMesh1, rightForestMesh1, leftForestMesh2, rightForestMesh2; 
+    const forestLength = 600; 
+    const waterLength = 600;  
 
     let lanePositions = [-2, 0, 2];
     let currentLane = 1;
     let speed = 0.1;
     let chances = 3;
-    const SUBMERGE_AMOUNT = 0.3; // Adjusted for more submersion
+    const SUBMERGE_AMOUNT = 0.3; 
     let CharacterInitialY = 0;
     let characterBaseYOffset = 0;
 
@@ -204,7 +204,7 @@ import { Water } from 'three/addons/objects/Water.js';
       varying vec2 vUv;
       uniform float time;
       
-      ${simpleNoise} // Ensure simpleNoise is defined in this scope
+      ${simpleNoise} 
       
         void main() {
             vUv = uv;
@@ -372,13 +372,13 @@ import { Water } from 'three/addons/objects/Water.js';
             console.error("gltfLoader not initialized in addTrees.");
             return;
         }
-        if (!character || !forestMesh1 || !forestMesh2) {
+        if (!character || (!leftForestMesh1 && !rightForestMesh1)) { 
             console.warn("Character or terrain not ready in addTrees, will retry or skip if necessary.");
             if (!character) {
                 console.log("addTrees: Character not ready.");
                 return;
             }
-            if(!forestMesh1 || !forestMesh2){
+            if(!leftForestMesh1 && !rightForestMesh1){ 
                 console.log("addTrees: Forest meshes not ready.");
                 return;
             }
@@ -389,18 +389,29 @@ import { Water } from 'three/addons/objects/Water.js';
             function(gltf) {
                 console.log("Pine tree model loaded.");
                 const treeModel = gltf.scene;
-                const numTrees = 100; 
+                const numTrees = 300; 
 
                 for (let i = 0; i < numTrees; i++) {
                     const tree = treeModel.clone();
                     const side = (i % 2 === 0) ? -1 : 1; 
-                    const xPos = side * (5 + 1 + Math.random() * 15); 
-                    const zPos = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
+                    
+                    let terrainMeshForY;
+                    let xPos;
+
+                    if (side === -1) { 
+                        xPos = -6 - (Math.random() * (144 - 1)); 
+                        terrainMeshForY = leftForestMesh1; 
+                    } else { 
+                        xPos = 6 + (Math.random() * (144 - 1));  
+                        terrainMeshForY = rightForestMesh1; 
+                    }
+                    
+                    const yPos = terrainMeshForY ? terrainMeshForY.position.y + 0.01 : 0.61; 
 
                     tree.position.set(
                         xPos,
-                        forestMesh1.position.y + 0.01, 
-                        zPos
+                        yPos, 
+                        (character ? character.position.z : 0) - (forestLength / 2) + (Math.random() * forestLength) 
                     );
 
                     const randomScaleBase = 1.5 + Math.random() * 1.0; 
@@ -427,7 +438,7 @@ import { Water } from 'three/addons/objects/Water.js';
     }
     function addGrass() {
         console.log("addGrass function called (Instanced Planar Grass).");
-        if (!character || !forestMesh1) {
+        if (!character || (!leftForestMesh1 && !rightForestMesh1)) { 
             console.warn("Character or terrain not ready in addGrass, deferring or skipping.");
             return;
         }
@@ -435,7 +446,7 @@ import { Water } from 'three/addons/objects/Water.js';
         const bladeGeometry = new THREE.PlaneGeometry(0.1, 1, 1, 4); 
         bladeGeometry.translate(0, 0.5, 0); 
 
-        const totalPatches = 50; 
+        const totalPatches = 200; 
         const instancesPerPatch = 150; 
 
         const dummy = new THREE.Object3D(); 
@@ -446,18 +457,28 @@ import { Water } from 'three/addons/objects/Water.js';
             patchMesh.receiveShadow = true;
 
             const side = (i % 2 === 0) ? -1 : 1;
-            const patchX = side * (5 + 0.5 + Math.random() * 10); 
-            const patchZ = (character.position.z - forestLength / 2) + (Math.random() * forestLength);
+            let terrainMeshForY;
+            let patchX;
+
+            if (side === -1) { 
+                patchX = -6 - (2.5 + Math.random() * (144 - 5)); 
+                terrainMeshForY = leftForestMesh1;
+            } else { 
+                patchX = 6 + (2.5 + Math.random() * (144 - 5));  
+                terrainMeshForY = rightForestMesh1;
+            }
+
+            const yPos = terrainMeshForY ? terrainMeshForY.position.y + 0.01 : 0.61; 
             
             patchMesh.position.set(
                 patchX,
-                forestMesh1.position.y + 0.01, 
-                patchZ
+                yPos,
+                (character ? character.position.z : 0) - (forestLength / 2) + (Math.random() * forestLength) 
             );
             scene.add(patchMesh);
             grasss.push(patchMesh); 
 
-            for (let j = 0; j < instancesPerPatch; j++) {
+            for (let j_g = 0; j_g < instancesPerPatch; j_g++) { 
                 dummy.position.set(
                     (Math.random() - 0.5) * 5,  
                     0, 
@@ -466,7 +487,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 dummy.scale.setScalar(0.5 + Math.random() * 0.5);
                 dummy.rotation.y = Math.random() * Math.PI;
                 dummy.updateMatrix();
-                patchMesh.setMatrixAt(j, dummy.matrix);
+                patchMesh.setMatrixAt(j_g, dummy.matrix);
             }
             patchMesh.instanceMatrix.needsUpdate = true;
         }
@@ -884,53 +905,107 @@ import { Water } from 'three/addons/objects/Water.js';
 
         console.log("Attempting to add terrain planes.");
         if (heightMapImage.image && HeightMapTexture && heightMapImage.image.complete && heightMapImage.image.naturalHeight !== 0) {
-            const size = 256;
+            const size = 256; 
             const canvas = document.createElement('canvas');
             canvas.width = size; canvas.height = size;
             const context = canvas.getContext('2d');
             context.drawImage(heightMapImage.image, 0, 0, size, size);
             const heightData = context.getImageData(0, 0, size, size).data;
-            const planeGeometry = new THREE.PlaneGeometry(300, forestLength, size - 1, size - 1);
-            for (let i = 0; i < planeGeometry.attributes.position.count; i++) {
-                const xVal = i % size; const yVal = Math.floor(i / size);
-                const height = heightData[(yVal * size + xVal) * 4] / 255 * 10;
-                planeGeometry.attributes.position.setZ(i, height);
+            
+            const sideTerrainWidth = 144; 
+            const sideTerrainWidthSegments = Math.floor((size - 1) * (sideTerrainWidth / 300)); 
+            const sideTerrainDepthSegments = size - 1; 
+
+            const sideTerrainGeometry = new THREE.PlaneGeometry(sideTerrainWidth, forestLength, sideTerrainWidthSegments, sideTerrainDepthSegments);
+            
+            const s_positions = sideTerrainGeometry.attributes.position;
+            const s_widthSegs = sideTerrainGeometry.parameters.widthSegments;
+            const s_heightSegs = sideTerrainGeometry.parameters.heightSegments;
+
+            for (let j_s = 0; j_s <= s_heightSegs; j_s++) { 
+                for (let i_s = 0; i_s <= s_widthSegs; i_s++) {
+                    const index_s = j_s * (s_widthSegs + 1) + i_s;
+                    const xPixel = Math.floor((i_s / s_widthSegs) * (size - 1));
+                    const yPixel = j_s; 
+                    const heightMapPixelIndex = (yPixel * size + xPixel) * 4;
+                    
+                    if (heightMapPixelIndex < heightData.length) {
+                        const height = heightData[heightMapPixelIndex] / 255 * 10;
+                        s_positions.setZ(index_s, height);
+                    } else {
+                         s_positions.setZ(index_s, 0); 
+                    }
+                }
             }
-            planeGeometry.computeVertexNormals();
+            sideTerrainGeometry.computeVertexNormals();
+
             const planeMaterial = new THREE.MeshStandardMaterial({ map: HeightMapTexture });
 
-            forestMesh1 = new THREE.Mesh(planeGeometry, planeMaterial);
-            forestMesh1.rotation.x = -Math.PI / 2;
-            forestMesh1.position.y = 0.6; 
-            forestMesh1.position.z = -forestLength / 2 + 50;
-            forestMesh1.receiveShadow = true;
-            scene.add(forestMesh1);
+            leftForestMesh1 = new THREE.Mesh(sideTerrainGeometry, planeMaterial);
+            leftForestMesh1.rotation.x = -Math.PI / 2;
+            leftForestMesh1.position.y = 0.6; 
+            leftForestMesh1.position.x = -6 - (sideTerrainWidth / 2); 
+            leftForestMesh1.position.z = -forestLength / 2 + 50;
+            leftForestMesh1.receiveShadow = true;
+            scene.add(leftForestMesh1);
 
-            forestMesh2 = new THREE.Mesh(planeGeometry.clone(), planeMaterial.clone());
-            forestMesh2.rotation.x = -Math.PI / 2;
-            forestMesh2.position.y = 0.6; 
-            forestMesh2.position.z = forestMesh1.position.z - forestLength;
-            forestMesh2.receiveShadow = true;
-            scene.add(forestMesh2);
-            console.log("Dual terrain planes added.");
+            rightForestMesh1 = new THREE.Mesh(sideTerrainGeometry.clone(), planeMaterial.clone()); 
+            rightForestMesh1.rotation.x = -Math.PI / 2;
+            rightForestMesh1.position.y = 0.6;
+            rightForestMesh1.position.x = 6 + (sideTerrainWidth / 2);  
+            rightForestMesh1.position.z = -forestLength / 2 + 50;
+            rightForestMesh1.receiveShadow = true;
+            scene.add(rightForestMesh1);
+
+            leftForestMesh2 = new THREE.Mesh(sideTerrainGeometry.clone(), planeMaterial.clone());
+            leftForestMesh2.rotation.x = -Math.PI / 2;
+            leftForestMesh2.position.y = 0.6;
+            leftForestMesh2.position.x = -6 - (sideTerrainWidth / 2);
+            leftForestMesh2.position.z = leftForestMesh1.position.z - forestLength;
+            leftForestMesh2.receiveShadow = true;
+            scene.add(leftForestMesh2);
+
+            rightForestMesh2 = new THREE.Mesh(sideTerrainGeometry.clone(), planeMaterial.clone());
+            rightForestMesh2.rotation.x = -Math.PI / 2;
+            rightForestMesh2.position.y = 0.6;
+            rightForestMesh2.position.x = 6 + (sideTerrainWidth / 2);
+            rightForestMesh2.position.z = rightForestMesh1.position.z - forestLength;
+            rightForestMesh2.receiveShadow = true;
+            scene.add(rightForestMesh2);
+
+            console.log("Dual left/right terrain planes added.");
         } else {
             console.warn("Terrain textures not ready, using placeholder flat terrain.");
-            const placeholderGeo = new THREE.PlaneGeometry(300, forestLength);
+            const sideTerrainWidth = 144; 
+            const placeholderSideGeo = new THREE.PlaneGeometry(sideTerrainWidth, forestLength);
             const placeholderMat = new THREE.MeshStandardMaterial({ color: 0x335522 });
-            forestMesh1 = new THREE.Mesh(placeholderGeo, placeholderMat);
-            forestMesh1.rotation.x = -Math.PI / 2; forestMesh1.position.y = 0.6; 
-            forestMesh1.position.z = -forestLength/2 + 50; scene.add(forestMesh1);
-            forestMesh2 = new THREE.Mesh(placeholderGeo.clone(), placeholderMat.clone());
-            forestMesh2.rotation.x = -Math.PI/2; forestMesh2.position.y = 0.6; 
-            forestMesh2.position.z = forestMesh1.position.z - forestLength; scene.add(forestMesh2);
-            console.log("Placeholder terrain planes added.");
+            
+            leftForestMesh1 = new THREE.Mesh(placeholderSideGeo, placeholderMat);
+            leftForestMesh1.rotation.x = -Math.PI / 2; leftForestMesh1.position.y = 0.6;
+            leftForestMesh1.position.x = -6 - (sideTerrainWidth / 2);
+            leftForestMesh1.position.z = -forestLength/2 + 50; scene.add(leftForestMesh1);
+
+            rightForestMesh1 = new THREE.Mesh(placeholderSideGeo.clone(), placeholderMat.clone());
+            rightForestMesh1.rotation.x = -Math.PI / 2; rightForestMesh1.position.y = 0.6;
+            rightForestMesh1.position.x = 6 + (sideTerrainWidth / 2);
+            rightForestMesh1.position.z = -forestLength/2 + 50; scene.add(rightForestMesh1);
+            
+            leftForestMesh2 = new THREE.Mesh(placeholderSideGeo.clone(), placeholderMat.clone());
+            leftForestMesh2.rotation.x = -Math.PI / 2; leftForestMesh2.position.y = 0.6;
+            leftForestMesh2.position.x = -6 - (sideTerrainWidth / 2);
+            leftForestMesh2.position.z = leftForestMesh1.position.z - forestLength; scene.add(leftForestMesh2);
+
+            rightForestMesh2 = new THREE.Mesh(placeholderSideGeo.clone(), placeholderMat.clone());
+            rightForestMesh2.rotation.x = -Math.PI / 2; rightForestMesh2.position.y = 0.6;
+            rightForestMesh2.position.x = 6 + (sideTerrainWidth / 2);
+            rightForestMesh2.position.z = rightForestMesh1.position.z - forestLength; scene.add(rightForestMesh2);
+            
+            console.log("Placeholder side terrain planes added.");
         }
 
         console.log("Attempting to add water planes. Water Normals loaded:", waterNormals && waterNormals.image && waterNormals.image.complete);
         if (Water && waterNormals && waterNormals.image && waterNormals.image.complete && waterNormals.image.naturalHeight !== 0) {
             const waterPlaneGeometry = new THREE.PlaneGeometry(10, waterLength, 10, 50);
-            const widthSegments = waterPlaneGeometry.parameters.widthSegments; 
-            const depthSegments = waterPlaneGeometry.parameters.depthSegments; 
 
             let sunDir = new THREE.Vector3(0,1,0);
             if (sky && sky.material.uniforms.sunPosition) {
@@ -1090,7 +1165,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 console.log("Character added to scene. BaseYOffset:", characterBaseYOffset, "Final Y:", character.position.y);
 
                 console.log("Character loaded, now calling addTrees, addGrass, addFishes.");
-                if (forestMesh1 && forestMesh2) { 
+                if (leftForestMesh1 && rightForestMesh1) { 
                     addTrees();
                     addGrass();
                 } else {
@@ -1138,16 +1213,22 @@ import { Water } from 'three/addons/objects/Water.js';
             lastTime = currentTime - (delta % interval);
             animateWater();
 
-            if (forestMesh1 && forestMesh2 && character) {
-                forestMesh1.position.z += speed;
-                forestMesh2.position.z += speed;
-                if (forestMesh1.position.z > character.position.z + forestLength / 2 + 20) {
-                    forestMesh1.position.z = forestMesh2.position.z - forestLength + speed;
+            if (leftForestMesh1 && rightForestMesh1 && leftForestMesh2 && rightForestMesh2 && character) {
+                leftForestMesh1.position.z += speed;
+                rightForestMesh1.position.z += speed;
+                leftForestMesh2.position.z += speed;
+                rightForestMesh2.position.z += speed;
+
+                if (leftForestMesh1.position.z > character.position.z + forestLength / 2 + 20) {
+                    leftForestMesh1.position.z = leftForestMesh2.position.z - forestLength + speed;
+                    rightForestMesh1.position.z = rightForestMesh2.position.z - forestLength + speed; 
                 }
-                if (forestMesh2.position.z > character.position.z + forestLength / 2 + 20) {
-                    forestMesh2.position.z = forestMesh1.position.z - forestLength + speed;
+                if (leftForestMesh2.position.z > character.position.z + forestLength / 2 + 20) {
+                    leftForestMesh2.position.z = leftForestMesh1.position.z - forestLength + speed;
+                    rightForestMesh2.position.z = rightForestMesh1.position.z - forestLength + speed; 
                 }
             }
+
             if (water1 && water2 && character) {
                 water1.position.z += speed;
                 water2.position.z += speed;
@@ -1235,7 +1316,11 @@ import { Water } from 'three/addons/objects/Water.js';
                 tree.position.z += speed; 
                 if (character && tree.position.z > character.position.z + (forestLength / 2) + 20) {
                     const side = (Math.random() < 0.5) ? -1 : 1;
-                    tree.position.x = side * (7 + 5 + Math.random() * 60);
+                    if (side === -1) { 
+                        tree.position.x = -6 - (Math.random() * (144 - 1));
+                    } else { 
+                        tree.position.x = 6 + (Math.random() * (144 - 1));
+                    }
                     tree.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
 
                     const randomScaleBase = 1.5 + Math.random() * 1.0;
@@ -1244,7 +1329,11 @@ import { Water } from 'three/addons/objects/Water.js';
                     tree.rotation.y = Math.random() * Math.PI * 2;
                 } else if (!character && tree.position.z > (forestLength / 2) + 20) { 
                     const side = (Math.random() < 0.5) ? -1 : 1;
-                    tree.position.x = side * (7 + 5 + Math.random() * 60);
+                     if (side === -1) { 
+                        tree.position.x = -6 - (Math.random() * (144 - 1));
+                    } else { 
+                        tree.position.x = 6 + (Math.random() * (144 - 1));
+                    }
                     tree.position.z = -(forestLength / 2) - Math.random() * (forestLength/2);
                 }
             }
@@ -1258,11 +1347,19 @@ import { Water } from 'three/addons/objects/Water.js';
 
                 if (character && grassPatch.position.z > character.position.z + (forestLength / 2) + 20) {
                     const side = (Math.random() < 0.5) ? -1 : 1;
-                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); 
+                    if (side === -1) { 
+                        grassPatch.position.x = -6 - (2.5 + Math.random() * (144 - 5));
+                    } else { 
+                        grassPatch.position.x = 6 + (2.5 + Math.random() * (144 - 5));
+                    }
                     grassPatch.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
                 } else if (!character && grassPatch.position.z > (forestLength / 2) + 20) { 
                     const side = (Math.random() < 0.5) ? -1 : 1;
-                    grassPatch.position.x = side * (7 + 2 + Math.random() * 60); 
+                    if (side === -1) { 
+                        grassPatch.position.x = -6 - (2.5 + Math.random() * (144 - 5));
+                    } else { 
+                        grassPatch.position.x = 6 + (2.5 + Math.random() * (144 - 5));
+                    }
                     grassPatch.position.z = -(forestLength / 2) - Math.random() * (forestLength / 2);
                 }
             }
@@ -1276,7 +1373,6 @@ import { Water } from 'three/addons/objects/Water.js';
                     obstacle.userData = obstacle.userData || {};
                     const now = performance.now();
                     
-                    // --- Frontal Splash Logic ---
                     const frontSplashCooldown = 120 + Math.random() * 100; 
                     if (!obstacle.userData.lastFrontSplashTime || (now - obstacle.userData.lastFrontSplashTime > frontSplashCooldown)) {
                         const frontSplashPos = new THREE.Vector3(obstacle.position.x, waterSurfaceY + 0.05, obstacle.position.z - obstacle.scale.z * 0.5);
@@ -1284,7 +1380,6 @@ import { Water } from 'three/addons/objects/Water.js';
                         obstacle.userData.lastFrontSplashTime = now;
                     }
 
-                    // --- V-Shaped Rear Wake Logic ---
                     const rearWakeCooldown = 100 + Math.random() * 100; 
                     if (!obstacle.userData.lastRearWakeTime || (now - obstacle.userData.lastRearWakeTime > rearWakeCooldown)) { 
                         const rearEmitterOffset = obstacle.scale.z * 0.3; 
@@ -1494,3 +1589,5 @@ import { Water } from 'three/addons/objects/Water.js';
 </div>
 </body>
 </html>
+
+[end of ridingonit/test.html]
