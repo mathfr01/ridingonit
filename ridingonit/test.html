@@ -120,7 +120,7 @@ import { Water } from 'three/addons/objects/Water.js';
     let currentLane = 1;
     let speed = 0.1;
     let chances = 3;
-    const SUBMERGE_AMOUNT = 0.15; 
+    const SUBMERGE_AMOUNT = 0.3; 
     let CharacterInitialY = 0;
     let characterBaseYOffset = 0;
 
@@ -147,8 +147,8 @@ import { Water } from 'three/addons/objects/Water.js';
 
     let isJumping = false;
     let jumpProgress = 0; 
-    const JUMP_HEIGHT = 1.2; // Increased jump height
-    const JUMP_DURATION = 30; 
+    const JUMP_HEIGHT = 2; 
+    const JUMP_DURATION = 60; 
     const JUMP_SQUASH_SCALE_Y = 0.7; 
     const JUMP_SQUASH_SCALE_XZ = 1.1; 
     let originalCharacterScaleY = 0.4; 
@@ -1619,12 +1619,12 @@ import { Water } from 'three/addons/objects/Water.js';
 
             updateParticles(1/fps); 
 
-            // Bank Edge Splashes / Foam - DEBUG VISIBILITY
+            // Bank Edge Splashes / Foam
             if (character && water1 && !isPaused && animationLoopStarted && bankSplashGlobalCooldown) {
                 const now = performance.now();
                 const bankSplashCooldownPeriod = 75; // milliseconds
                 if (now - bankSplashGlobalCooldown.lastBankSplashTime > bankSplashCooldownPeriod) {
-                    console.log(`Emitting bank splashes at time: ${now}`); 
+                    // console.log(`Emitting bank splashes at time: ${now}`); 
                     bankSplashGlobalCooldown.lastBankSplashTime = now;
 
                     const characterZ = character.position.z;
@@ -1641,26 +1641,26 @@ import { Water } from 'three/addons/objects/Water.js';
                         const leftBankEmitterX = -6.0 + randomXOffset; 
                         const emitPosLeft = new THREE.Vector3(leftBankEmitterX, waterY, z);
                         emitSplash(emitPosLeft,
-                           5,                                // count (increased significantly from 1)
-                           0.1 + Math.random() * 0.05,     // baseVelocity (increased)
-                           (Math.PI * 0.25 + (Math.random() - 0.5) * 0.5), // angleOffset
-                           1.0,                              // speedMultiplier
-                           1.5,                              // upwardSpeedBias (increased significantly)
-                           2.0,                              // particleScaleMultiplier (increased significantly)
-                           2.0                               // lifeMultiplier (moderate, to see them clearly)
+                           1,                                  // count: 1 particle per emission event
+                           0.01 + Math.random() * 0.01,        // baseVelocity: very low
+                           (Math.PI * 0.15 + (Math.random() - 0.5) * 0.4), // currentAngleOffset for left
+                           1.0,                                // speedMultiplier
+                           0.1 + Math.random() * 0.1,          // upwardSpeedBias: very low, for a flat effect
+                           0.4 + Math.random() * 0.3,          // particleScaleMultiplier: small particles
+                           2.5 + Math.random() * 1.0           // lifeMultiplier: relatively long for a lingering, foamy look
                           ); 
 
                         // Right Bank
                         const rightBankEmitterX = 6.0 + randomXOffset;
                         const emitPosRight = new THREE.Vector3(rightBankEmitterX, waterY, z);
                         emitSplash(emitPosRight,
-                           5,                                // count
-                           0.1 + Math.random() * 0.05,     // baseVelocity
-                           (Math.PI * 0.75 + (Math.random() - 0.5) * 0.5), // angleOffset (pointing other way)
-                           1.0,                              // speedMultiplier
-                           1.5,                              // upwardSpeedBias
-                           2.0,                              // particleScaleMultiplier
-                           2.0                               // lifeMultiplier
+                           1,                                  // count: 1 particle per emission event
+                           0.01 + Math.random() * 0.01,        // baseVelocity: very low
+                           (Math.PI * 0.85 + (Math.random() - 0.5) * 0.4), // currentAngleOffset for right
+                           1.0,                                // speedMultiplier
+                           0.1 + Math.random() * 0.1,          // upwardSpeedBias: very low, for a flat effect
+                           0.4 + Math.random() * 0.3,          // particleScaleMultiplier: small particles
+                           2.5 + Math.random() * 1.0           // lifeMultiplier: relatively long for a lingering, foamy look
                           );
                     }
                 }
@@ -1915,3 +1915,4 @@ import { Water } from 'three/addons/objects/Water.js';
 </div>
 </body>
 </html>
+
