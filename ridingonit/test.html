@@ -114,6 +114,7 @@ import { Water } from 'three/addons/objects/Water.js';
     let leftForestMesh1, rightForestMesh1, leftForestMesh2, rightForestMesh2; 
     const forestLength = 600; 
     const waterLength = 600;  
+    let raycaster; // Added Raycaster
 
     let lanePositions = [-2, 0, 2];
     let currentLane = 1;
@@ -136,6 +137,9 @@ import { Water } from 'three/addons/objects/Water.js';
     let isTransitioning = false;
     let targetLane = 1;
     let isPaused = false;
+    let isBoosting = false;
+    let originalSpeed = 0; 
+    const BOOST_FACTOR = 1.5; 
 
     let shakeDuration = 0;
     let shakeTime = 0;
@@ -366,22 +370,77 @@ import { Water } from 'three/addons/objects/Water.js';
         if(renderer) renderer.toneMappingExposure = effectController.exposure;
         console.log("Sky initialized and added to scene.");
     }
+
+    function getTargetTerrainMesh(xPos, zPos) {
+        if (!character || !leftForestMesh1 || !leftForestMesh2 || !rightForestMesh1 || !rightForestMesh2) {
+            // console.warn(`getTargetTerrainMesh: Aborting. Character: ${!!character}, LFM1: ${!!leftForestMesh1}, LFM2: ${!!leftForestMesh2}, RFM1: ${!!rightForestMesh1}, RFM2: ${!!rightForestMesh2}`);
+            return null;
+        }
+        // console.log(`getTargetTerrainMesh Input: xPos=${xPos.toFixed(2)}, zPos=${zPos.toFixed(2)}`);
+
+        const meshesToCheck = [];
+        if (xPos < 0) { // Left side
+            meshesToCheck.push(leftForestMesh1, leftForestMesh2);
+            // console.log(`Item on Left. LFM1_Z: ${leftForestMesh1.position.z.toFixed(2)}, LFM2_Z: ${leftForestMesh2.position.z.toFixed(2)}`);
+        } else { // Right side
+            meshesToCheck.push(rightForestMesh1, rightForestMesh2);
+            // console.log(`Item on Right. RFM1_Z: ${rightForestMesh1.position.z.toFixed(2)}, RFM2_Z: ${rightForestMesh2.position.z.toFixed(2)}`);
+        }
+
+        for (const mesh of meshesToCheck) {
+            if (!mesh) {
+                // console.log("Skipping a null mesh in meshesToCheck");
+                continue;
+            }
+            
+            const halfLength = forestLength / 2;
+            // mesh.position.z is the CENTER of the mesh segment in world space.
+            const meshMinZ = mesh.position.z - halfLength;
+            const meshMaxZ = mesh.position.z + halfLength;
+
+            // console.log(`Checking mesh UUID: ${mesh.uuid} (World Z Center: ${mesh.position.z.toFixed(2)}) for item @ worldZ ${zPos.toFixed(2)}. Mesh Z Range: [${meshMinZ.toFixed(2)}, ${meshMaxZ.toFixed(2)})`);
+
+            if (zPos >= meshMinZ && zPos < meshMaxZ) { // Use < for meshMaxZ for non-overlapping ranges
+                // console.log(`Selected mesh ${mesh.uuid} for item at Z ${zPos.toFixed(2)}`);
+                return mesh;
+            }
+        }
+        // console.warn(`No suitable terrain mesh found for XZ: ${xPos.toFixed(2)}, ${zPos.toFixed(2)}. Checked ${meshesToCheck.length} meshes.`);
+        // Fallback: if slightly outside, pick the closest one (can happen with floating point or items right on an edge being regenerated)
+        let closestMesh = null;
+        let minDistance = Infinity;
+        for (const mesh of meshesToCheck) {
+            if (!mesh) continue;
+            const dist = Math.abs(zPos - mesh.position.z);
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestMesh = mesh;
+            }
+        }
+        if (closestMesh && minDistance < forestLength / 4) { // Only if it's reasonably close
+             // console.warn(`Fallback: Choosing closest mesh ${closestMesh.uuid} (dist: ${minDistance.toFixed(2)}) for item at Z ${zPos.toFixed(2)}`);
+            return closestMesh;
+        }
+
+        // console.error(`CRITICAL: No mesh truly found for XZ: ${xPos.toFixed(2)}, ${zPos.toFixed(2)}. Last resort: null.`);
+        return null;
+    }
+
     function addTrees() {
         console.log("addTrees function called.");
         if (!gltfLoader) {
             console.error("gltfLoader not initialized in addTrees.");
             return;
         }
-        if (!character || (!leftForestMesh1 && !rightForestMesh1)) { 
-            console.warn("Character or terrain not ready in addTrees, will retry or skip if necessary.");
-            if (!character) {
-                console.log("addTrees: Character not ready.");
-                return;
-            }
-            if(!leftForestMesh1 && !rightForestMesh1){ 
-                console.log("addTrees: Forest meshes not ready.");
-                return;
-            }
+        if (!character || !leftForestMesh1 || !rightForestMesh1 || !leftForestMesh2 || !rightForestMesh2) { 
+            console.warn("Character or one or more terrain meshes not ready in addTrees. Will retry or skip.");
+            if (!character) console.log("addTrees: Character not ready.");
+            if (!leftForestMesh1 || !rightForestMesh1 || !leftForestMesh2 || !rightForestMesh2) console.log("addTrees: One or more forest meshes not ready.");
+            return;
+        }
+        if (!raycaster) {
+            raycaster = new THREE.Raycaster();
+            console.log("Raycaster initialized in addTrees");
         }
 
         gltfLoader.load(
@@ -395,24 +454,38 @@ import { Water } from 'three/addons/objects/Water.js';
                     const tree = treeModel.clone();
                     const side = (i % 2 === 0) ? -1 : 1; 
                     
-                    let terrainMeshForY;
                     let xPos;
-
                     if (side === -1) { 
                         xPos = -6 - (Math.random() * (144 - 1)); 
-                        terrainMeshForY = leftForestMesh1; 
                     } else { 
                         xPos = 6 + (Math.random() * (144 - 1));  
-                        terrainMeshForY = rightForestMesh1; 
                     }
                     
-                    const yPos = terrainMeshForY ? terrainMeshForY.position.y + 0.01 : 0.61; 
+                    const zPos = (character ? character.position.z : 0) - (forestLength / 2) + (Math.random() * forestLength);
+                    tree.position.set(xPos, 50, zPos); 
 
-                    tree.position.set(
-                        xPos,
-                        yPos, 
-                        (character ? character.position.z : 0) - (forestLength / 2) + (Math.random() * forestLength) 
-                    );
+                    const targetTerrainMesh = getTargetTerrainMesh(tree.position.x, tree.position.z);
+                    // console.log(`addTrees: Item at XZ (${tree.position.x.toFixed(2)}, ${tree.position.z.toFixed(2)}). Target mesh: ${targetTerrainMesh ? targetTerrainMesh.uuid : 'null'}`);
+
+                    if (targetTerrainMesh) {
+                        targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                        const rayOrigin = new THREE.Vector3(tree.position.x, 50, tree.position.z);
+                        const rayDirection = new THREE.Vector3(0, -1, 0);
+                        raycaster.set(rayOrigin, rayDirection);
+                        const intersects = raycaster.intersectObject(targetTerrainMesh, false);
+                        // console.log(`Raycasting for tree ${i}. Target: ${targetTerrainMesh.uuid}, Origin: ${rayOrigin.y.toFixed(2)}, Intersects: ${intersects.length}`);
+
+                        if (intersects.length > 0) {
+                            tree.position.y = intersects[0].point.y;
+                            // console.log(`Tree ${i} Y set to ${tree.position.y.toFixed(2)}`);
+                        } else {
+                            tree.position.y = -2.1; 
+                            console.warn(`Tree raycast FAILED. Tree XZ: (${tree.position.x.toFixed(2)}, ${tree.position.z.toFixed(2)}). Target: ${targetTerrainMesh.uuid}, Target_Z: ${targetTerrainMesh.position.z.toFixed(2)}`);
+                        }
+                    } else {
+                        tree.position.y = -2.1; 
+                        console.warn(`No target terrain mesh for tree at XZ: (${tree.position.x.toFixed(2)}, ${tree.position.z.toFixed(2)})`);
+                    }
 
                     const randomScaleBase = 1.5 + Math.random() * 1.0; 
                     const randomScaleY = randomScaleBase * (1.0 + Math.random() * 1.0); 
@@ -438,9 +511,13 @@ import { Water } from 'three/addons/objects/Water.js';
     }
     function addGrass() {
         console.log("addGrass function called (Instanced Planar Grass).");
-        if (!character || (!leftForestMesh1 && !rightForestMesh1)) { 
-            console.warn("Character or terrain not ready in addGrass, deferring or skipping.");
+        if (!character || !leftForestMesh1 || !rightForestMesh1 || !leftForestMesh2 || !rightForestMesh2) { 
+            console.warn("Character or one or more terrain meshes not ready in addGrass, deferring or skipping.");
             return;
+        }
+        if (!raycaster) { // Ensure raycaster is available
+            raycaster = new THREE.Raycaster();
+            console.log("Raycaster initialized in addGrass");
         }
 
         const bladeGeometry = new THREE.PlaneGeometry(0.1, 1, 1, 4); 
@@ -457,24 +534,36 @@ import { Water } from 'three/addons/objects/Water.js';
             patchMesh.receiveShadow = true;
 
             const side = (i % 2 === 0) ? -1 : 1;
-            let terrainMeshForY;
             let patchX;
 
             if (side === -1) { 
                 patchX = -6 - (2.5 + Math.random() * (144 - 5)); 
-                terrainMeshForY = leftForestMesh1;
             } else { 
                 patchX = 6 + (2.5 + Math.random() * (144 - 5));  
-                terrainMeshForY = rightForestMesh1;
             }
-
-            const yPos = terrainMeshForY ? terrainMeshForY.position.y + 0.01 : 0.61; 
             
-            patchMesh.position.set(
-                patchX,
-                yPos,
-                (character ? character.position.z : 0) - (forestLength / 2) + (Math.random() * forestLength) 
-            );
+            const patchZ = (character ? character.position.z : 0) - (forestLength / 2) + (Math.random() * forestLength);
+            patchMesh.position.set(patchX, 50, patchZ); // Initial Y high for raycasting
+
+            const targetTerrainMesh = getTargetTerrainMesh(patchX, patchZ);
+            if (targetTerrainMesh) {
+                targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                const rayOrigin = new THREE.Vector3(patchMesh.position.x, 50, patchMesh.position.z);
+                const rayDirection = new THREE.Vector3(0, -1, 0);
+                raycaster.set(rayOrigin, rayDirection);
+                const intersects = raycaster.intersectObject(targetTerrainMesh, false);
+                // console.log(`Raycasting for grass ${i}. Target: ${targetTerrainMesh.uuid}, Origin: ${rayOrigin.y.toFixed(2)}, Intersects: ${intersects.length}`);
+
+                if (intersects.length > 0) {
+                    patchMesh.position.y = intersects[0].point.y;
+                } else {
+                    patchMesh.position.y = -2.1; // Fallback Y
+                    console.warn("Grass patch raycast FAILED. Patch XZ:", patchMesh.position.x.toFixed(2), patchMesh.position.z.toFixed(2), "Targeted mesh:", targetTerrainMesh.uuid, "Target_Z:", targetTerrainMesh.position.z.toFixed(2));
+                }
+            } else {
+                patchMesh.position.y = -2.1; // Fallback Y
+                console.warn("No target terrain mesh for grass patch at XZ:", patchMesh.position.x.toFixed(2), patchMesh.position.z.toFixed(2));
+            }
             scene.add(patchMesh);
             grasss.push(patchMesh); 
 
@@ -681,7 +770,8 @@ import { Water } from 'three/addons/objects/Water.js';
             if(event.key === 'p' && gameInitialized) togglePause();
             return;
         }
-        if (isPaused && event.key !== 'p') return;
+        if (isPaused && event.key !== 'p' && event.key.toLowerCase() !== 'w' && event.key !== 'ArrowUp') return;
+        if (isPaused && (event.key.toLowerCase() === 'w' || event.key === 'ArrowUp')) return; // Don't boost if paused
 
         const turnAudio = document.getElementById('turnAudio');
         if (isTransitioning && (event.key === 'ArrowLeft' || event.key === 'a' || event.key === 'ArrowRight' || event.key === 'd')) {
@@ -694,22 +784,37 @@ import { Water } from 'three/addons/objects/Water.js';
             }
             return;
         }
-        if (isTransitioning) return;
+        // Allow boosting even if transitioning lanes, but not if already transitioning for other reasons.
+        // if (isTransitioning) return; // Original check, might be too restrictive for boost.
 
         if (event.key === 'ArrowLeft' || event.key === 'a') {
+            if (isTransitioning) return; // Prevent lane change if already changing lanes
             if(turnAudio) turnAudio.play();
             targetLane = Math.max(0, currentLane - 1);
             targetCharacterRotationY = Math.PI + Math.PI / 8;
             targetCharacterRotationZ = LEAN_ANGLE;
         } else if (event.key === 'ArrowRight' || event.key === 'd') {
+            if (isTransitioning) return; // Prevent lane change if already changing lanes
             if(turnAudio) turnAudio.play();
             targetLane = Math.min(2, currentLane + 1);
             targetCharacterRotationY = Math.PI - Math.PI / 8;
             targetCharacterRotationZ = -LEAN_ANGLE;
-        } else if (event.key === 'p') { togglePause(); }
-        else { return; }
+        } else if (event.key === 'p') { 
+            togglePause(); 
+            return; // Return after toggling pause
+        } else if ((event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') && !isPaused && animationLoopStarted) {
+            if (!isBoosting) {
+                originalSpeed = speed;
+                speed *= BOOST_FACTOR;
+                // speed = Math.min(speed, MAX_TOTAL_SPEED); // Optional: MAX_TOTAL_SPEED not defined yet
+                isBoosting = true;
+                console.log("Boost ON. Speed:", speed.toFixed(3));
+            }
+            return; // Return to ensure no lane transition logic is accidentally triggered
+        }
+        else { return; } // Explicitly return if no relevant key is pressed
 
-        if (targetLane !== currentLane && character) {
+        if (!isTransitioning && targetLane !== currentLane && character) { // Check !isTransitioning before starting a new one
             isTransitioning = true;
 
             const waterY = water1 ? water1.position.y : -0.15;
@@ -790,8 +895,22 @@ import { Water } from 'three/addons/objects/Water.js';
     }
     function IncreaseSpeed() {
         if (totalPoints % 1000 === 0 && totalPoints > 0) {
-            speed = Math.min(speed + 0.02, 0.5);
-            console.log("Speed increased to:", speed);
+            let newBaseSpeed = Math.min((isBoosting ? originalSpeed : speed) + 0.02, 0.5);
+            if (isBoosting) {
+                originalSpeed = newBaseSpeed;
+                speed = originalSpeed * BOOST_FACTOR;
+            } else {
+                speed = newBaseSpeed;
+            }
+            console.log("Speed increased by schedule. Base speed now:", (isBoosting ? originalSpeed.toFixed(3) : speed.toFixed(3)), "Current actual speed:", speed.toFixed(3));
+        }
+    }
+
+    function onKeyUp(event) {
+        if ((event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') && isBoosting) {
+            speed = originalSpeed;
+            isBoosting = false;
+            console.log("Boost OFF. Speed restored to:", speed.toFixed(3));
         }
     }
 
@@ -874,6 +993,10 @@ import { Water } from 'three/addons/objects/Water.js';
         console.log("init function started.");
         scene = new THREE.Scene();
         scene.fog = new THREE.Fog(0x95b0c0, 20, 120); 
+        if (!raycaster) { // Ensure raycaster is initialized globally
+            raycaster = new THREE.Raycaster();
+            console.log("Raycaster initialized in init()");
+        }
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000000);
         camera.position.set(0, 2.0, 4.0);
@@ -1119,7 +1242,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 const yScale = baseScale * (0.7 + Math.random() * 0.6); 
                 obstacle.scale.set(baseScale, yScale, baseScale);
                 obstacle.rotation.y = Math.random() * Math.PI * 2;
-                obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.15, -20 - i * 20); 
+                obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.35, -20 - i * 20); 
                 obstacle.traverse(node => { if (node.isMesh) node.castShadow = true; });
                 obstacles.push(obstacle);
                 scene.add(obstacle);
@@ -1145,6 +1268,7 @@ import { Water } from 'three/addons/objects/Water.js';
         }, undefined, (error) => console.error("Error loading gold_nugget.glb", error));
 
         document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp); // Added keyup listener
         document.addEventListener('touchstart', onTouchStart);
         document.addEventListener('touchmove', onTouchMove);
         document.addEventListener('touchend', onTouchEnd);
@@ -1288,11 +1412,11 @@ import { Water } from 'three/addons/objects/Water.js';
                 const rotationAngle = Math.sin(fish.userData.jumpTime * Math.PI / fishJumpDuration) * Math.PI;
                 fish.rotation.x = rotationAngle;
                 const waterSurfaceYForFishSplash = water1 ? water1.position.y : -0.15;
-                if (fish.userData.previousY <= waterSurfaceYForFishSplash && fish.position.y > waterSurfaceYForFishSplash) {
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0, 1.0, 1.0);
+                if (fish.userData.previousY <= waterSurfaceYForFishSplash && fish.position.y > waterSurfaceYForFishSplash) { // Exiting water
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 4 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.03, 0, 1.0, 1.5, 1.2, 1.0);
                 }
-                else if (fish.userData.previousY > waterSurfaceYForFishSplash && fish.position.y <= waterSurfaceYForFishSplash) {
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 2 + Math.floor(Math.random() * 2), 0.02 + Math.random()*0.02, 0, 1.0, 1.0, 1.0, 1.0);
+                else if (fish.userData.previousY > waterSurfaceYForFishSplash && fish.position.y <= waterSurfaceYForFishSplash) { // Entering water
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 4 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.03, 0, 1.0, 1.5, 1.2, 1.0);
                 }
                 fish.userData.previousY = fish.position.y;
 
@@ -1318,19 +1442,45 @@ import { Water } from 'three/addons/objects/Water.js';
 
             for (let tree of trees) {
                 tree.position.z += speed; 
-                if (character && tree.position.z > character.position.z + (forestLength / 2) + 20) {
+                if (character && tree.position.z > character.position.z + (forestLength / 2) + 20) { // Tree is out of view
                     const side = (Math.random() < 0.5) ? -1 : 1;
+                    let newXPos;
                     if (side === -1) { 
-                        tree.position.x = -6 - (Math.random() * (144 - 1));
+                        newXPos = -6 - (Math.random() * (144 - 1));
                     } else { 
-                        tree.position.x = 6 + (Math.random() * (144 - 1));
+                        newXPos = 6 + (Math.random() * (144 - 1));
                     }
-                    tree.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
+                    const newZPos = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 4); 
+                    tree.position.x = newXPos;
+                    tree.position.z = newZPos;
+
+                    const targetTerrainMesh = getTargetTerrainMesh(newXPos, newZPos);
+                    // console.log(`Recycle Tree: Item at XZ (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target mesh: ${targetTerrainMesh ? targetTerrainMesh.uuid : 'null'}`);
+                    if (targetTerrainMesh && raycaster) {
+                        targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                        const origin = new THREE.Vector3(newXPos, 50, newZPos); 
+                        const direction = new THREE.Vector3(0, -1, 0); 
+                        raycaster.set(origin, direction);
+                        const intersects = raycaster.intersectObject(targetTerrainMesh, false);
+                        // console.log(`Raycasting for recycled tree. Target: ${targetTerrainMesh.uuid}, Origin: ${origin.y.toFixed(2)}, Intersects: ${intersects.length}`);
+                        if (intersects.length > 0) {
+                            tree.position.y = intersects[0].point.y;
+                            // console.log(`Recycled Tree Y set to ${tree.position.y.toFixed(2)}`);
+                        } else {
+                            tree.position.y = -2.1; 
+                            console.warn(`Tree raycast (recycle) FAILED. Tree XZ: (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target: ${targetTerrainMesh.uuid}, Target_Z: ${targetTerrainMesh.position.z.toFixed(2)}`);
+                        }
+                    } else {
+                        tree.position.y = -2.1; 
+                        let reason = !targetTerrainMesh ? "No target terrain mesh" : "No raycaster";
+                        console.warn(`No target or raycaster for recycled tree (${reason}). Tree XZ: (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)})`);
+                    }
 
                     const randomScaleBase = 1.5 + Math.random() * 1.0;
                     const randomScaleY = randomScaleBase * (1.0 + Math.random() * 1.0);
                     tree.scale.set(randomScaleBase, randomScaleY, randomScaleBase);
                     tree.rotation.y = Math.random() * Math.PI * 2;
+
                 } else if (!character && tree.position.z > (forestLength / 2) + 20) { 
                     const side = (Math.random() < 0.5) ? -1 : 1;
                      if (side === -1) { 
@@ -1351,12 +1501,38 @@ import { Water } from 'three/addons/objects/Water.js';
 
                 if (character && grassPatch.position.z > character.position.z + (forestLength / 2) + 20) {
                     const side = (Math.random() < 0.5) ? -1 : 1;
+                    let newXPos;
                     if (side === -1) { 
-                        grassPatch.position.x = -6 - (2.5 + Math.random() * (144 - 5));
+                        newXPos = -6 - (2.5 + Math.random() * (144 - 5));
                     } else { 
-                        grassPatch.position.x = 6 + (2.5 + Math.random() * (144 - 5));
+                        newXPos = 6 + (2.5 + Math.random() * (144 - 5));
                     }
-                    grassPatch.position.z = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
+                    const newZPos = character.position.z - (forestLength / 2) - Math.random() * (forestLength / 2);
+                    grassPatch.position.x = newXPos;
+                    grassPatch.position.z = newZPos;
+
+                    const targetTerrainMesh = getTargetTerrainMesh(newXPos, newZPos);
+                    // console.log(`Recycle Grass: Item at XZ (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target mesh: ${targetTerrainMesh ? targetTerrainMesh.uuid : 'null'}`);
+                    if (targetTerrainMesh && raycaster) {
+                        targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                        const rayOrigin = new THREE.Vector3(newXPos, 50, newZPos);
+                        const rayDirection = new THREE.Vector3(0, -1, 0);
+                        raycaster.set(rayOrigin, rayDirection);
+                        const intersects = raycaster.intersectObject(targetTerrainMesh, false);
+                        // console.log(`Raycasting for recycled grass. Target: ${targetTerrainMesh.uuid}, Origin: ${rayOrigin.y.toFixed(2)}, Intersects: ${intersects.length}`);
+                        if (intersects.length > 0) {
+                            grassPatch.position.y = intersects[0].point.y;
+                            // console.log(`Recycled Grass Y set to ${grassPatch.position.y.toFixed(2)}`);
+                        } else {
+                            grassPatch.position.y = -2.1; 
+                            console.warn(`Grass patch raycast (recycle) FAILED. Patch XZ: (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target: ${targetTerrainMesh.uuid}, Target_Z: ${targetTerrainMesh.position.z.toFixed(2)}`);
+                        }
+                    } else {
+                        grassPatch.position.y = -2.1; 
+                        let reason = !targetTerrainMesh ? "No target terrain mesh" : "No raycaster";
+                        console.warn(`No target or raycaster for recycled grass patch (${reason}). Patch XZ: (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)})`);
+                    }
+
                 } else if (!character && grassPatch.position.z > (forestLength / 2) + 20) { 
                     const side = (Math.random() < 0.5) ? -1 : 1;
                     if (side === -1) { 
@@ -1365,6 +1541,7 @@ import { Water } from 'three/addons/objects/Water.js';
                         grassPatch.position.x = 6 + (2.5 + Math.random() * (144 - 5));
                     }
                     grassPatch.position.z = -(forestLength / 2) - Math.random() * (forestLength / 2);
+                    // Y position remains unchanged or as set by addGrass if character was null then
                 }
             }
 
@@ -1380,7 +1557,7 @@ import { Water } from 'three/addons/objects/Water.js';
                     const frontSplashCooldown = 120 + Math.random() * 100; 
                     if (!obstacle.userData.lastFrontSplashTime || (now - obstacle.userData.lastFrontSplashTime > frontSplashCooldown)) {
                         const frontSplashPos = new THREE.Vector3(obstacle.position.x, waterSurfaceY + 0.05, obstacle.position.z - obstacle.scale.z * 0.5);
-                        emitSplash(frontSplashPos, 3 + Math.floor(Math.random() * 3), 0.05, -Math.PI / 2 + (Math.random() - 0.5) * 0.4, 1.0, 0.8, 1.75, 1.2);
+                        emitSplash(frontSplashPos, 5 + Math.floor(Math.random() * 4), 0.06 + Math.random() * 0.02, -Math.PI / 2 + (Math.random() - 0.5) * 0.4, 1.0, 0.8, 2.0, 1.5);
                         obstacle.userData.lastFrontSplashTime = now;
                     }
 
@@ -1390,10 +1567,10 @@ import { Water } from 'three/addons/objects/Water.js';
                         const vSpreadAngle = Math.PI / 6; 
                         
                         const wakePos1 = new THREE.Vector3(obstacle.position.x - obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
-                        emitSplash(wakePos1, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 + vSpreadAngle, 1.0, 0.5, 1.0, 1.0); 
+                        emitSplash(wakePos1, 3 + Math.floor(Math.random() * 3), 0.04 + Math.random() * 0.02, Math.PI / 2 + vSpreadAngle, 1.0, 0.5, 1.5, 1.8); 
                                                                                                                 
                         const wakePos2 = new THREE.Vector3(obstacle.position.x + obstacle.scale.x * 0.2, waterSurfaceY + 0.05, obstacle.position.z + rearEmitterOffset);
-                        emitSplash(wakePos2, 1 + Math.floor(Math.random() * 2), 0.03, Math.PI / 2 - vSpreadAngle, 1.0, 0.5, 1.0, 1.0);
+                        emitSplash(wakePos2, 3 + Math.floor(Math.random() * 3), 0.04 + Math.random() * 0.02, Math.PI / 2 - vSpreadAngle, 1.0, 0.5, 1.5, 1.8);
                         
                         obstacle.userData.lastRearWakeTime = now; 
                     }
@@ -1593,4 +1770,3 @@ import { Water } from 'three/addons/objects/Water.js';
 </div>
 </body>
 </html>
-
