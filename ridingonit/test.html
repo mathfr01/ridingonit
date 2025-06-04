@@ -289,7 +289,7 @@ import { Water } from 'three/addons/objects/Water.js';
     const splashTexture = createSplashTexture();
 
     let particlePool = [];
-    const maxParticles = 100; 
+    const maxParticles = 200; 
     let particleSystemContainer; 
 
     function modifyBankVertices(geometry, isLeftBank) {
@@ -1429,13 +1429,14 @@ import { Water } from 'three/addons/objects/Water.js';
                 }
                 // End of jump (jumpProgress >= 1.0)
                 else { 
+                    console.log("Jump completed. Splash triggered. isJumping:", isJumping, "jumpProgress:", jumpProgress); // Add this log
                     isJumping = false;
                     jumpProgress = 0;
                     character.position.y = characterBaseYOffset; 
-                    emitSplash(character.position, 15, 0.15, 0, 1.8, 1.5, 2.0, 1.5); 
-                    emitSplash(character.position, 15, 0.15, Math.PI / 2, 1.8, 1.5, 2.0, 1.5); 
-                    emitSplash(character.position, 15, 0.15, Math.PI, 1.8, 1.5, 2.0, 1.5); 
-                    emitSplash(character.position, 15, 0.15, 3 * Math.PI / 2, 1.8, 1.5, 2.0, 1.5); 
+                    emitSplash(character.position, 25, 0.18, 0, 1.8, 1.8, 3.0, 1.5); // Front
+                    emitSplash(character.position, 25, 0.18, Math.PI / 2, 1.8, 1.8, 3.0, 1.5); // Right side
+                    emitSplash(character.position, 25, 0.18, Math.PI, 1.8, 1.8, 3.0, 1.5); // Back
+                    emitSplash(character.position, 25, 0.18, 3 * Math.PI / 2, 1.8, 1.8, 3.0, 1.5); // Left side
                     character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ);
                 }
             } else { // Not jumping, apply bobbing
