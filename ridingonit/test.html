@@ -1337,11 +1337,22 @@ import { Water } from 'three/addons/objects/Water.js';
     function updateCamera() {
         if (!character || !camera) return;
         const desiredX = character.position.x;
-        const desiredY = character.position.y + 1.0;
-        const desiredZ = character.position.z + 1.5;
+        // Keep camera Y position stable relative to the character's base Y, not its jumping Y.
+        // 'characterBaseYOffset' is the character's Y position when on the log, not jumping.
+        // Add a fixed offset for camera height, e.g., 1.0 or similar to existing.
+        const fixedCameraHeightAboveBase = 1.0; 
+        const desiredY = characterBaseYOffset + fixedCameraHeightAboveBase; 
+        const desiredZ = character.position.z + 1.5; // Keep Z tracking the same
+
         camera.position.x = desiredX;
         camera.position.y = desiredY;
         camera.position.z = desiredZ;
+
+        // Ensure camera continues to look at the character, or slightly in front.
+        // The existing camera.lookAt in init() sets the initial lookAt. 
+        // If the camera's lookAt is not dynamically updated elsewhere to follow the character,
+        // we might need to add: camera.lookAt(character.position.x, characterBaseYOffset, character.position.z);
+        // For now, let's assume the existing lookAt behavior is sufficient and only change camera.position.y.
     }
 
     function animate(currentTime) {
@@ -1368,7 +1379,7 @@ import { Water } from 'three/addons/objects/Water.js';
         if (character && !isPaused && animationLoopStarted) {
             if (isJumping) {
                 jumpProgress += 1 / JUMP_DURATION;
-                let currentJumpArcY = 0; // Y offset from jump arc
+                let currentJumpArcY = 0; 
 
                 // Phase 1: Quick Anticipation (Squash) - unchanged
                 if (jumpProgress < 0.15) {
@@ -1379,71 +1390,62 @@ import { Water } from 'three/addons/objects/Water.js';
                     );
                     character.position.y = characterBaseYOffset; 
                 } 
-                // Phase 2: Upward Stretch with slight lift
+                // Phase 2: Upward Stretch with slight lift - unchanged from previous refinement
                 else if (jumpProgress < 0.3) { 
                     const stretchProgress = (jumpProgress - 0.15) / (0.3 - 0.15);
                     character.scale.set(
-                        originalCharacterScaleXZ * (1.15 - 0.15 * stretchProgress), // XZ from 1.15 to 1.0
-                        originalCharacterScaleY * (0.7 + (1.2 - 0.7) * stretchProgress),  // Y from 0.7 to 1.2 (max stretch reduced from 1.4)
+                        originalCharacterScaleXZ * (1.15 - 0.15 * stretchProgress), 
+                        originalCharacterScaleY * (0.7 + (1.2 - 0.7) * stretchProgress),
                         originalCharacterScaleXZ * (1.15 - 0.15 * stretchProgress)
                     );
-                    // Add slight upward movement during stretch
-                    character.position.y = characterBaseYOffset + (JUMP_HEIGHT * 0.05 * stretchProgress); // Initial 5% of jump height
+                    character.position.y = characterBaseYOffset + (JUMP_HEIGHT * 0.05 * stretchProgress); 
                 } 
-                // Phase 3: Actual Upward Movement / Airtime 
-                else if (jumpProgress < 0.7) {
-                    const arcProgress = (jumpProgress - 0.3) / (0.7 - 0.3);
-                    // Start arc from the 5% height achieved in phase 2, complete remaining 95%
-                    currentJumpArcY = (JUMP_HEIGHT * 0.05) + Math.sin(arcProgress * Math.PI) * (JUMP_HEIGHT * 0.95);
-                    character.position.y = characterBaseYOffset + currentJumpArcY;
-
-                    const airScaleProgress = (jumpProgress - 0.3) / (0.7 - 0.3); 
-                    character.scale.set(
-                        originalCharacterScaleXZ, // Normal XZ
-                        originalCharacterScaleY * (1.2 - (1.2 - 1.0) * airScaleProgress),  // Y from 1.2 (new max stretch) back to 1.0
-                        originalCharacterScaleXZ
-                    );
-                } 
-                // Phase 4: Landing (Slight Squash)
-                else if (jumpProgress < 0.85) {
-                    // Y position continues based on the full arc (adjust to ensure it matches the modified arc)
-                    // We need a continuous arc from the start of phase 3 to end of phase 5 for Y position
-                    const overallArcProgress = (jumpProgress - 0.3) / (1.0 - 0.3); // Progress from start of actual airtime to end of landing
-                    currentJumpArcY = (JUMP_HEIGHT * 0.05) + Math.sin(overallArcProgress * Math.PI) * (JUMP_HEIGHT * 0.95);
-                    character.position.y = characterBaseYOffset + currentJumpArcY;
-                    
-                    const landSquashProgress = (jumpProgress - 0.7) / (0.85 - 0.7); 
-                    character.scale.set(
-                        originalCharacterScaleXZ * (1.0 + 0.05 * landSquashProgress), // Max XZ expansion 1.05 (reduced from 1.1)
-                        originalCharacterScaleY * (1.0 - (1.0 - 0.9) * landSquashProgress), // Max Y squash 0.9 (reduced from 0.8)
-                        originalCharacterScaleXZ * (1.0 + 0.05 * landSquashProgress)
-                    );
-                } 
-                // Phase 5: Return to Normal Scale
-                else { 
-                    const overallArcProgress = (jumpProgress - 0.3) / (1.0 - 0.3);
-                    currentJumpArcY = (JUMP_HEIGHT * 0.05) + Math.sin(overallArcProgress * Math.PI) * (JUMP_HEIGHT * 0.95);
-                    // Ensure Y position doesn't go below base due to sine curve ending slightly off
+                // Phases 3, 4, 5 combined for Y-Position arc calculation:
+                // (Covers from jumpProgress 0.3 up to just before 1.0)
+                else if (jumpProgress < 1.0) { 
+                    // Single arc calculation for the entire main airborne phase
+                    const airTimeProgress = (jumpProgress - 0.3) / (1.0 - 0.3); // Maps [0.3, 1.0) of jumpProgress to [0, 1) for sin input
+                    currentJumpArcY = (JUMP_HEIGHT * 0.05) + Math.sin(airTimeProgress * Math.PI) * (JUMP_HEIGHT * 0.95);
                     character.position.y = characterBaseYOffset + Math.max(0, currentJumpArcY);
 
-
-                    const resetProgress = (jumpProgress - 0.85) / (1.0 - 0.85);
-                    character.scale.set(
-                        originalCharacterScaleXZ * (1.05 - 0.05 * resetProgress), // From 1.05 to 1.0
-                        originalCharacterScaleY * (0.9 + (1.0 - 0.9) * resetProgress),   // From 0.9 to 1.0
-                        originalCharacterScaleXZ * (1.05 - 0.05 * resetProgress)
-                    );
+                    // Scaling logic now needs to be nested based on jumpProgress within this block
+                    // Phase 3 Scaling: Airtime Normalization (0.3 to 0.7)
+                    if (jumpProgress < 0.7) {
+                        const airScaleProgress = (jumpProgress - 0.3) / (0.7 - 0.3); 
+                        character.scale.set(
+                            originalCharacterScaleXZ, 
+                            originalCharacterScaleY * (1.2 - (1.2 - 1.0) * airScaleProgress), 
+                            originalCharacterScaleXZ
+                        );
+                    } 
+                    // Phase 4 Scaling: Landing Squash (0.7 to 0.85)
+                    else if (jumpProgress < 0.85) {
+                        const landSquashProgress = (jumpProgress - 0.7) / (0.85 - 0.7); 
+                        character.scale.set(
+                            originalCharacterScaleXZ * (1.0 + 0.05 * landSquashProgress), 
+                            originalCharacterScaleY * (1.0 - (1.0 - 0.9) * landSquashProgress), 
+                            originalCharacterScaleXZ * (1.0 + 0.05 * landSquashProgress)
+                        );
+                    } 
+                    // Phase 5 Scaling: Return to Normal (0.85 to 1.0)
+                    else { // This covers jumpProgress from 0.85 up to (but not including) 1.0
+                        const resetProgress = (jumpProgress - 0.85) / (1.0 - 0.85); 
+                        character.scale.set(
+                            originalCharacterScaleXZ * (1.05 - 0.05 * resetProgress), 
+                            originalCharacterScaleY * (0.9 + (1.0 - 0.9) * resetProgress),   
+                            originalCharacterScaleXZ * (1.05 - 0.05 * resetProgress)
+                        );
+                    }
                 }
-
-                // End of jump
-                if (jumpProgress >= 1) {
+                // End of jump (jumpProgress >= 1.0)
+                else { 
                     isJumping = false;
                     jumpProgress = 0;
                     character.position.y = characterBaseYOffset; 
-                    emitSplash(character.position, 15, 0.15, 0, 1.8, 1.5, 2.0, 1.5); // Front
-                    emitSplash(character.position, 15, 0.15, Math.PI / 2, 1.8, 1.5, 2.0, 1.5); // Right side
-                    emitSplash(character.position, 15, 0.15, Math.PI, 1.8, 1.5, 2.0, 1.5); // Back
-                    emitSplash(character.position, 15, 0.15, 3 * Math.PI / 2, 1.8, 1.5, 2.0, 1.5); // Left side
+                    emitSplash(character.position, 15, 0.15, 0, 1.8, 1.5, 2.0, 1.5); 
+                    emitSplash(character.position, 15, 0.15, Math.PI / 2, 1.8, 1.5, 2.0, 1.5); 
+                    emitSplash(character.position, 15, 0.15, Math.PI, 1.8, 1.5, 2.0, 1.5); 
+                    emitSplash(character.position, 15, 0.15, 3 * Math.PI / 2, 1.8, 1.5, 2.0, 1.5); 
                     character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ);
                 }
             } else { // Not jumping, apply bobbing
