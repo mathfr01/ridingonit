@@ -703,59 +703,75 @@ import { Water } from 'three/addons/objects/Water.js';
 
     let touchStartX = null;
     let touchEndX = null;
+    let touchStartY = null;
+    let touchEndY = null;
     function onTouchStart(event) {
         if (!animationLoopStarted || isPaused) return;
         touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY; // Add this line
     }
     function onTouchMove(event) {
         if (!animationLoopStarted || isPaused) return;
         touchEndX = event.touches[0].clientX;
+        touchEndY = event.touches[0].clientY; // Add this line
     }
     function onTouchEnd() {
-        if (!character || !gameReadyToStartByUser || !assetsLoaded || !gameInitialized || !animationLoopStarted || isPaused) return;
-        if (touchStartX && touchEndX) {
+        if (!character || !gameReadyToStartByUser || !assetsLoaded || !gameInitialized || !animationLoopStarted || isPaused) {
+            // Reset touch end values if game not ready
+            touchStartX = null; touchEndX = null;
+            touchStartY = null; touchEndY = null;
+            return;
+        }
+
+        if (touchStartX && touchEndX && touchStartY && touchEndY) { // Ensure all coordinates were captured
             const deltaX = touchEndX - touchStartX;
-            const turnAudio = document.getElementById('turnAudio');
-            if (deltaX > 50) {
-                if(turnAudio) turnAudio.play();
-                targetLane = Math.min(2, currentLane + 1);
-                targetCharacterRotationY = Math.PI - Math.PI / 8;
-                targetCharacterRotationZ = -LEAN_ANGLE;
-            } else if (deltaX < -50) {
-                if(turnAudio) turnAudio.play();
-                targetLane = Math.max(0, currentLane - 1);
-                targetCharacterRotationY = Math.PI + Math.PI / 8;
-                targetCharacterRotationZ = LEAN_ANGLE;
-            }
-            if (targetLane !== currentLane && character) {
-                isTransitioning = true;
-                
-                const waterY = water1 ? water1.position.y : -0.15;
-                let splashSideOffset = 0.6; 
-                let splashPosition = new THREE.Vector3();
+            const deltaY = touchEndY - touchStartY;
 
-                if (targetLane < currentLane) { 
-                    splashPosition.set(
-                        character.position.x + splashSideOffset, 
-                        waterY + 0.1, 
-                        character.position.z 
-                    );
-                } else { 
-                    splashPosition.set(
-                        character.position.x - splashSideOffset, 
-                        waterY + 0.1, 
-                        character.position.z
-                    );
+            // Prioritize horizontal swipes for lane changes
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 30) { // Horizontal swipe prioritized, reduced threshold to 30
+                const turnAudio = document.getElementById('turnAudio');
+                if (deltaX > 30) { // Swipe Right
+                    if(turnAudio) turnAudio.play();
+                    targetLane = Math.min(2, currentLane + 1);
+                    targetCharacterRotationY = Math.PI - Math.PI / 8;
+                    targetCharacterRotationZ = -LEAN_ANGLE;
+                } else if (deltaX < -30) { // Swipe Left
+                    if(turnAudio) turnAudio.play();
+                    targetLane = Math.max(0, currentLane - 1);
+                    targetCharacterRotationY = Math.PI + Math.PI / 8;
+                    targetCharacterRotationZ = LEAN_ANGLE;
                 }
-                emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0, 1.0, 1.0);
-
-                smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
-                    currentLane = targetLane;
-                    isTransitioning = false;
-                });
+                if (targetLane !== currentLane && character && !isTransitioning) { // Check !isTransitioning here
+                    isTransitioning = true;
+                    const waterY = water1 ? water1.position.y : -0.15;
+                    let splashSideOffset = 0.6; 
+                    let splashPosition = new THREE.Vector3();
+                    if (targetLane < currentLane) { 
+                        splashPosition.set(character.position.x + splashSideOffset, waterY + 0.1, character.position.z);
+                    } else { 
+                        splashPosition.set(character.position.x - splashSideOffset, waterY + 0.1, character.position.z);
+                    }
+                    emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0, 1.0, 1.0);
+                    smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
+                        currentLane = targetLane; isTransitioning = false;
+                    });
+                }
+            } 
+            // Check for vertical swipe for jump if not primarily horizontal
+            else if (Math.abs(deltaY) > Math.abs(deltaX) && deltaY < -30) { // Vertical swipe upwards, reduced threshold to -30
+                if (!isJumping && !isPaused && animationLoopStarted && character) { // Standard jump conditions
+                    isJumping = true;
+                    jumpProgress = 0;
+                    character.position.y = characterBaseYOffset; // Ensure consistent jump start Y
+                    if (character.userData) character.userData.didTakeOffSplash = false; // Reset splash flag for new jump
+                    console.log("Jump initiated by swipe");
+                    // Optionally, play a jump sound here
+                }
             }
         }
+        // Reset all touch coordinates
         touchStartX = null; touchEndX = null;
+        touchStartY = null; touchEndY = null;
     }
 
     function onKeyDown(event) {
@@ -1275,6 +1291,7 @@ import { Water } from 'three/addons/objects/Water.js';
         gltfLoader.load('3Dmodels/Lumberjack_on_a_log.glb', function (gltf) { 
                 console.log("Lumberjack_on_a_log.glb loaded successfully in addCharacter.");
                 character = gltf.scene;
+                character.userData = {}; // Initialize userData for splash flags
                 character.scale.set(0.4, 0.4, 0.4);
                 originalCharacterScaleY = character.scale.y; 
                 originalCharacterScaleXZ = character.scale.x;
@@ -1304,12 +1321,20 @@ import { Water } from 'three/addons/objects/Water.js';
      }
     function updateCamera() {
         if (!character || !camera) return;
+
+        const LERP_FACTOR_X = 0.1;
+        const LERP_FACTOR_Y = 0.05; 
+        const LERP_FACTOR_Z = 0.1;
+
         const desiredX = character.position.x;
-        const desiredY = character.position.y + 1.0;
+        const desiredY = character.position.y + 1.0; 
         const desiredZ = character.position.z + 1.5;
-        camera.position.x = desiredX;
-        camera.position.y = desiredY;
-        camera.position.z = desiredZ;
+
+        camera.position.x = THREE.MathUtils.lerp(camera.position.x, desiredX, LERP_FACTOR_X);
+        camera.position.y = THREE.MathUtils.lerp(camera.position.y, desiredY, LERP_FACTOR_Y);
+        camera.position.z = THREE.MathUtils.lerp(camera.position.z, desiredZ, LERP_FACTOR_Z);
+
+        camera.lookAt(character.position.x, characterBaseYOffset + 0.5, character.position.z); 
     }
 
     function animate(currentTime) {
@@ -1335,8 +1360,30 @@ import { Water } from 'three/addons/objects/Water.js';
         
         if (character && !isPaused && animationLoopStarted) {
             if (isJumping) {
+                // if (character.userData === undefined) character.userData = {}; // Already done in addCharacter
+
                 jumpProgress += 1 / JUMP_DURATION;
-                let currentJumpArcY = 0; // Y offset from jump arc
+                
+                const currentActualProgress = Math.min(jumpProgress, 1.0); 
+                const jumpArc = Math.sin(currentActualProgress * Math.PI); 
+                character.position.y = characterBaseYOffset + jumpArc * JUMP_HEIGHT;
+
+                // Take-off Splash
+                // Check if character.userData exists before trying to access didTakeOffSplash
+                if (character.userData && jumpProgress > 0.29 && jumpProgress < 0.4 && !character.userData.didTakeOffSplash) { 
+                    // Widened trigger window slightly (0.29 to 0.4 instead of 0.35)
+                    const splashPos = new THREE.Vector3(character.position.x, water1 ? water1.position.y : -0.15, character.position.z);
+                    emitSplash(splashPos,
+                               15 + Math.floor(Math.random() * 10),
+                               0.08 + Math.random() * 0.04,
+                               0, // All-around burst
+                               1.2,
+                               1.5,
+                               1.8,
+                               1.2
+                              );
+                    character.userData.didTakeOffSplash = true; 
+                }
 
                 // Phase 1: Quick Anticipation (Squash)
                 if (jumpProgress < 0.15) {
@@ -1345,8 +1392,8 @@ import { Water } from 'three/addons/objects/Water.js';
                         originalCharacterScaleY * 0.7,
                         originalCharacterScaleXZ * 1.15
                     );
-                    // Y position remains at base during anticipation
-                    character.position.y = characterBaseYOffset; 
+                    // Y position remains at base during anticipation 
+                    // character.position.y = characterBaseYOffset; // REMOVED - Handled by unified jumpArc calculation
                 } 
                 // Phase 2: Full Upward Stretch (Character still mostly grounded)
                 else if (jumpProgress < 0.3) { 
@@ -1357,14 +1404,11 @@ import { Water } from 'three/addons/objects/Water.js';
                         originalCharacterScaleXZ * (1.15 - 0.15 * stretchProgress)
                     );
                     // Character still at base Y or just starting a tiny lift for the stretch
-                    character.position.y = characterBaseYOffset; 
+                    // character.position.y = characterBaseYOffset; // REMOVED - Handled by unified jumpArc calculation
                 } 
                 // Phase 3: Actual Upward Movement / Airtime 
                 else if (jumpProgress < 0.7) {
-                    // Remap jumpProgress for the arc part (0.3 to 0.7 of total progress mapped to 0 to PI for sin)
-                    const arcProgress = (jumpProgress - 0.3) / (0.7 - 0.3);
-                    currentJumpArcY = Math.sin(arcProgress * Math.PI) * JUMP_HEIGHT;
-                    character.position.y = characterBaseYOffset + currentJumpArcY;
+                    // Y-position is now handled by the unified jumpArc calculation above this phase block
 
                     // Scale normalizes during airtime
                     const airScaleProgress = (jumpProgress - 0.3) / (0.7 - 0.3); // Normalize 0.3-0.7 to 0-1
@@ -1376,9 +1420,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 } 
                 // Phase 4: Landing (Slight Squash)
                 else if (jumpProgress < 0.85) {
-                    const fullArcProgress = (jumpProgress - 0.3) / (1.0 - 0.3); // Map 0.3-1.0 of jump to 0-1 for sin input
-                    currentJumpArcY = Math.sin(fullArcProgress * Math.PI) * JUMP_HEIGHT;
-                    character.position.y = characterBaseYOffset + currentJumpArcY;
+                    // Y-position is now handled by the unified jumpArc calculation above this phase block
                     
                     const landSquashProgress = (jumpProgress - 0.7) / (0.85 - 0.7); 
                     character.scale.set(
@@ -1389,10 +1431,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 } 
                 // Phase 5: Return to Normal Scale (as jumpProgress approaches 1.0)
                 else { 
-                    // Y continues descent via arc
-                    const fullArcProgress = (jumpProgress - 0.3) / (1.0 - 0.3);
-                    currentJumpArcY = Math.sin(fullArcProgress * Math.PI) * JUMP_HEIGHT;
-                    character.position.y = characterBaseYOffset + currentJumpArcY;
+                    // Y-position is now handled by the unified jumpArc calculation above this phase block
 
                     const resetProgress = (jumpProgress - 0.85) / (1.0 - 0.85);
                     character.scale.set(
@@ -1402,11 +1441,35 @@ import { Water } from 'three/addons/objects/Water.js';
                     );
                 }
 
+                // Add specific logging for descent phase:
+                if (jumpProgress > 0.5) {
+                    // console.log(`Descent: jumpProgress=${jumpProgress.toFixed(3)}, jumpArc=${jumpArc.toFixed(3)}, charY=${character.position.y.toFixed(3)}`);
+                }
+
                 if (jumpProgress >= 1) {
+                    // Landing Splash - Ensure Y position for splash is at water level
+                    const landingSplashY = water1 ? water1.position.y : -0.15;
+                    const splashPos = new THREE.Vector3(character.position.x, landingSplashY, character.position.z);
+                    
+                    // Check if character was recently above water to avoid splashing if jump was too short or interrupted
+                    if (character.position.y > landingSplashY - 0.1) { // Small tolerance
+                         emitSplash(splashPos,
+                                   18 + Math.floor(Math.random() * 12), // Slightly more for landing
+                                   0.07 + Math.random() * 0.03,
+                                   0, 
+                                   1.1,
+                                   1.2, 
+                                   1.9,
+                                   1.3
+                                  );
+                    }
+
                     isJumping = false;
                     jumpProgress = 0;
-                    character.position.y = characterBaseYOffset; 
+                    character.position.y = characterBaseYOffset;
                     character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ);
+                    if (character.userData) character.userData.didTakeOffSplash = false; // Reset for next jump
+                    // console.log("Jump finished");
                 }
             } else { // Not jumping, apply bobbing
                 bobbingAngle += BOBBING_SPEED;
@@ -1624,43 +1687,48 @@ import { Water } from 'three/addons/objects/Water.js';
                 const now = performance.now();
                 const bankSplashCooldownPeriod = 75; // milliseconds
                 if (now - bankSplashGlobalCooldown.lastBankSplashTime > bankSplashCooldownPeriod) {
-                    // console.log(`Emitting bank splashes at time: ${now}`); 
+                    const characterZ = character.position.z; // Define characterZ for logging scope
+                    const startZ = characterZ - BANK_SPLASH_VIEW_LENGTH / 2; // Define startZ for logging
+                    const endZ = characterZ + BANK_SPLASH_VIEW_LENGTH / 2;   // Define endZ for logging
+                    console.log(`BankSplashDebug: EMITTING BANK SPLASHES. Time: ${now}, Loop Z from ${startZ.toFixed(2)} to ${endZ.toFixed(2)}`);
                     bankSplashGlobalCooldown.lastBankSplashTime = now;
 
-                    const characterZ = character.position.z;
-                    const viewMinZ = characterZ - BANK_SPLASH_VIEW_LENGTH / 2;
-                    const viewMaxZ = characterZ + BANK_SPLASH_VIEW_LENGTH / 2;
+                    const viewMinZ = startZ; // Use previously defined startZ
+                    const viewMaxZ = endZ;   // Use previously defined endZ
                     const waterY = water1.position.y + 0.05; // Slightly above water surface
 
                     for (let z = viewMinZ; z < viewMaxZ; z += (1 / BANK_SPLASH_DENSITY)) {
-                        if (Math.random() < 0.7) continue; // Random chance to skip some, for sparser effect
+                        // if (Math.random() < 0.7) continue; // Temporarily commented out for max emission
+                        // console.log(`BankSplashDebug: Attempting emit at X=${emitPosLeft.x.toFixed(2)}, Z=${z.toFixed(2)}`); (Enable if needed)
 
                         const randomXOffset = (Math.random() - 0.5) * 0.5; // Small random sideways jitter
                         
                         // Left Bank
                         const leftBankEmitterX = -6.0 + randomXOffset; 
                         const emitPosLeft = new THREE.Vector3(leftBankEmitterX, waterY, z);
+                        // console.log(`BankSplashDebug: Attempting emit at X=${emitPosLeft.x.toFixed(2)}, Z=${z.toFixed(2)}`);
                         emitSplash(emitPosLeft,
-                           1,                                  // count: 1 particle per emission event
-                           0.01 + Math.random() * 0.01,        // baseVelocity: very low
-                           (Math.PI * 0.15 + (Math.random() - 0.5) * 0.4), // currentAngleOffset for left
-                           1.0,                                // speedMultiplier
-                           0.1 + Math.random() * 0.1,          // upwardSpeedBias: very low, for a flat effect
-                           0.4 + Math.random() * 0.3,          // particleScaleMultiplier: small particles
-                           2.5 + Math.random() * 1.0           // lifeMultiplier: relatively long for a lingering, foamy look
+                           5,                                // count: Increased
+                           0.1 + Math.random() * 0.05,       // baseVelocity: Increased
+                           (Math.PI * 0.25 + (Math.random() - 0.5) * 0.5), // angleOffset (original debug angles)
+                           1.0,                              // speedMultiplier
+                           1.5,                              // upwardSpeedBias: Significantly increased
+                           2.5,                              // particleScaleMultiplier: Significantly increased
+                           2.0                               // lifeMultiplier: Moderate
                           ); 
 
                         // Right Bank
                         const rightBankEmitterX = 6.0 + randomXOffset;
                         const emitPosRight = new THREE.Vector3(rightBankEmitterX, waterY, z);
+                        // console.log(`BankSplashDebug: Attempting emit at X=${emitPosRight.x.toFixed(2)}, Z=${z.toFixed(2)}`);
                         emitSplash(emitPosRight,
-                           1,                                  // count: 1 particle per emission event
-                           0.01 + Math.random() * 0.01,        // baseVelocity: very low
-                           (Math.PI * 0.85 + (Math.random() - 0.5) * 0.4), // currentAngleOffset for right
-                           1.0,                                // speedMultiplier
-                           0.1 + Math.random() * 0.1,          // upwardSpeedBias: very low, for a flat effect
-                           0.4 + Math.random() * 0.3,          // particleScaleMultiplier: small particles
-                           2.5 + Math.random() * 1.0           // lifeMultiplier: relatively long for a lingering, foamy look
+                           5,                                // count: Increased
+                           0.1 + Math.random() * 0.05,       // baseVelocity: Increased
+                           (Math.PI * 0.75 + (Math.random() - 0.5) * 0.5), // angleOffset (original debug angles)
+                           1.0,                              // speedMultiplier
+                           1.5,                              // upwardSpeedBias: Significantly increased
+                           2.5,                              // particleScaleMultiplier: Significantly increased
+                           2.0                               // lifeMultiplier: Moderate
                           );
                     }
                 }
