@@ -703,59 +703,87 @@ import { Water } from 'three/addons/objects/Water.js';
 
     let touchStartX = null;
     let touchEndX = null;
+    let touchStartY = null;
+    let touchEndY = null;
+
     function onTouchStart(event) {
         if (!animationLoopStarted || isPaused) return;
         touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
     }
+
     function onTouchMove(event) {
         if (!animationLoopStarted || isPaused) return;
         touchEndX = event.touches[0].clientX;
+        touchEndY = event.touches[0].clientY;
     }
+
     function onTouchEnd() {
-        if (!character || !gameReadyToStartByUser || !assetsLoaded || !gameInitialized || !animationLoopStarted || isPaused) return;
-        if (touchStartX && touchEndX) {
+        // Guard clause: Ensure game is in a state that allows touch interactions.
+        if (!character || !gameReadyToStartByUser || !assetsLoaded || !gameInitialized || !animationLoopStarted || isPaused) {
+            // Reset all touch coordinates if exiting early due to game state.
+            touchStartX = null; touchEndX = null; touchStartY = null; touchEndY = null;
+            return;
+        }
+
+        // Proceed only if all touch start and end coordinates have been recorded.
+        // This means a touchstart and (at least one) touchmove event occurred.
+        if (touchStartX !== null && touchStartY !== null && touchEndX !== null && touchEndY !== null) {
             const deltaX = touchEndX - touchStartX;
-            const turnAudio = document.getElementById('turnAudio');
-            if (deltaX > 50) {
-                if(turnAudio) turnAudio.play();
-                targetLane = Math.min(2, currentLane + 1);
-                targetCharacterRotationY = Math.PI - Math.PI / 8;
-                targetCharacterRotationZ = -LEAN_ANGLE;
-            } else if (deltaX < -50) {
-                if(turnAudio) turnAudio.play();
-                targetLane = Math.max(0, currentLane - 1);
-                targetCharacterRotationY = Math.PI + Math.PI / 8;
-                targetCharacterRotationZ = LEAN_ANGLE;
-            }
-            if (targetLane !== currentLane && character) {
-                isTransitioning = true;
-                
-                const waterY = water1 ? water1.position.y : -0.15;
-                let splashSideOffset = 0.6; 
-                let splashPosition = new THREE.Vector3();
+            const deltaY = touchEndY - touchStartY;
 
-                if (targetLane < currentLane) { 
-                    splashPosition.set(
-                        character.position.x + splashSideOffset, 
-                        waterY + 0.1, 
-                        character.position.z 
-                    );
-                } else { 
-                    splashPosition.set(
-                        character.position.x - splashSideOffset, 
-                        waterY + 0.1, 
-                        character.position.z
-                    );
+            // Priority 1: Swipe Up for Jump.
+            // Condition: Significant upward movement (negative deltaY) and minimal horizontal movement.
+            if (deltaY < -40 && Math.abs(deltaX) < 50) { // Adjusted thresholds for responsiveness
+                if (!isJumping && character && animationLoopStarted && !isPaused) { // Check game conditions for jumping
+                    isJumping = true;
+                    jumpProgress = 0;
+                    console.log("Jump initiated by swipe up");
+                    // Reset touch coordinates as the jump action is complete.
+                    touchStartX = null; touchEndX = null; touchStartY = null; touchEndY = null;
+                    return; // Exit after processing the jump action.
                 }
-                emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0, 1.0, 1.0);
+            }
+            // Priority 2: Swipe Left/Right for Lane Change.
+            // Condition: Significant horizontal movement and minimal vertical movement.
+            else if (Math.abs(deltaX) > 50 && Math.abs(deltaY) < 50) {
+                const turnAudio = document.getElementById('turnAudio');
+                if (deltaX > 50) { // Swipe Right
+                    if (turnAudio) turnAudio.play();
+                    targetLane = Math.min(2, currentLane + 1);
+                    targetCharacterRotationY = Math.PI - Math.PI / 8;
+                    targetCharacterRotationZ = -LEAN_ANGLE;
+                } else { // Swipe Left (deltaX < -50 is implied by Math.abs(deltaX) > 50)
+                    if (turnAudio) turnAudio.play();
+                    targetLane = Math.max(0, currentLane - 1);
+                    targetCharacterRotationY = Math.PI + Math.PI / 8;
+                    targetCharacterRotationZ = LEAN_ANGLE;
+                }
 
-                smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
-                    currentLane = targetLane;
-                    isTransitioning = false;
-                });
+                if (targetLane !== currentLane && character && !isTransitioning) {
+                    isTransitioning = true;
+                    const waterY = water1 ? water1.position.y : -0.15;
+                    let splashSideOffset = 0.6;
+                    let splashPosition = new THREE.Vector3();
+
+                    if (targetLane < currentLane) {
+                        splashPosition.set(character.position.x + splashSideOffset, waterY + 0.1, character.position.z);
+                    } else {
+                        splashPosition.set(character.position.x - splashSideOffset, waterY + 0.1, character.position.z);
+                    }
+                    emitSplash(splashPosition, 4 + Math.floor(Math.random() * 3), 0.04 + Math.random()*0.03, 0, 1.0, 1.0, 1.0, 1.0);
+
+                    smoothTransition(character.position.x, lanePositions[targetLane], 100, () => {
+                        currentLane = targetLane;
+                        isTransitioning = false;
+                    });
+                }
             }
         }
-        touchStartX = null; touchEndX = null;
+
+        // Reset all touch coordinates at the end of handling,
+        // ensures they are clean for the next touch sequence.
+        touchStartX = null; touchEndX = null; touchStartY = null; touchEndY = null;
     }
 
     function onKeyDown(event) {
@@ -1406,6 +1434,7 @@ import { Water } from 'three/addons/objects/Water.js';
                     isJumping = false;
                     jumpProgress = 0;
                     character.position.y = characterBaseYOffset; 
+                    emitSplash(character.position, 25, 0.15, 0, 1.8, 1.5, 2.0, 1.5); // Enhanced splash on jump landing
                     character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ);
                 }
             } else { // Not jumping, apply bobbing
@@ -1915,4 +1944,3 @@ import { Water } from 'three/addons/objects/Water.js';
 </div>
 </body>
 </html>
-
