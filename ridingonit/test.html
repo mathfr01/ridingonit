@@ -306,7 +306,7 @@ import { Water } from 'three/addons/objects/Water.js';
         const depthSegments = geometry.parameters.heightSegments; 
 
         const initialZOffset = 0.05; 
-        const maxBankHeight = 1.5;
+        const maxBankHeight = 1.0;
         const randomHeightFactor = 0.3;
         const outwardPushFactor = 0.5;
         const randomSidewaysFactorBase = 0.05; 
@@ -1506,7 +1506,7 @@ import { Water } from 'three/addons/objects/Water.js';
             }
 
             for (let fish of fishes) {
-                const fishJumpHeight = 0.8; 
+                const fishJumpHeight = 1.5; 
                 const fishJumpDuration = 0.6; 
                 const fishJumpFrequency = 0.02; 
 
@@ -1522,10 +1522,10 @@ import { Water } from 'three/addons/objects/Water.js';
                 fish.rotation.x = rotationAngle;
                 const waterSurfaceYForFishSplash = water1 ? water1.position.y : -0.15;
                 if (fish.userData.previousY <= waterSurfaceYForFishSplash && fish.position.y > waterSurfaceYForFishSplash) { // Exiting water
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 4 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.03, 0, 1.0, 1.5, 1.2, 1.0);
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 6 + Math.floor(Math.random() * 4), 0.05 + Math.random()*0.03, 0, 1.0, 1.6, 1.4, 1.0);
                 }
                 else if (fish.userData.previousY > waterSurfaceYForFishSplash && fish.position.y <= waterSurfaceYForFishSplash) { // Entering water
-                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 4 + Math.floor(Math.random() * 3), 0.05 + Math.random()*0.03, 0, 1.0, 1.5, 1.2, 1.0);
+                    emitSplash(new THREE.Vector3(fish.position.x, waterSurfaceYForFishSplash + 0.05, fish.position.z), 6 + Math.floor(Math.random() * 4), 0.05 + Math.random()*0.03, 0, 1.0, 1.6, 1.4, 1.0);
                 }
                 fish.userData.previousY = fish.position.y;
 
@@ -1790,6 +1790,7 @@ import { Water } from 'three/addons/objects/Water.js';
             }
             checkCollisions();
             applyCameraShake();
+            console.log(`Animating: isPaused=${isPaused}, animationLoopStarted=${animationLoopStarted}, characterY=${character ? character.position.y.toFixed(2) : 'N/A'}`); 
             if(renderer && scene && camera) renderer.render(scene, camera);
             else console.error("Render call skipped: renderer, scene or camera missing.");
 
@@ -1834,12 +1835,11 @@ import { Water } from 'three/addons/objects/Water.js';
         // Prevent multiple countdowns if one is already in progress from startGame
         if (window.countdownStartedByButton) return; 
         window.countdownStartedByButton = true; // Flag specific to this button-initiated countdown
+        // isPaused = true; // startGame now handles this initial pause
 
-        isPaused = true; // Ensure game is paused during countdown
+        const pauseButton = document.getElementById('pauseButton'); // Already set by startGame
+        // if(pauseButton) pauseButton.innerText = "Pause"; 
         
-        const pauseButton = document.getElementById('pauseButton');
-        if(pauseButton) pauseButton.innerText = "Pause"; // Set text, as togglePause() might not be called
-
         const countdownElement = document.getElementById('countdown');
         if (!countdownElement) {
             console.error("Countdown element not found! Attempting to start game directly.");
@@ -1864,24 +1864,24 @@ import { Water } from 'three/addons/objects/Water.js';
                 clearInterval(currentCountdownInterval);
                 currentCountdownInterval = null;
                 countdownElement.style.display = 'none';
-                window.countdownStartedByButton = false; // Reset flag
+                window.countdownStartedByButton = false;
 
-                // Now, actually start or resume the game
-                if (!animationLoopStarted) {
-                    console.log("Countdown finished, animation loop not yet started. Initiating now.");
-                    initiateAnimationLoop(); // This should handle setting isPaused = false if needed via its own logic
-                } else if (isPaused) {
-                    console.log("Countdown finished, animation loop was paused. Resuming.");
-                    togglePause(); // This will set isPaused = false and handle audio
+                if (isPaused) { // Game should have been paused by startGame
+                    console.log("Countdown finished, game was paused. Resuming via togglePause().");
+                    togglePause(); // This will set isPaused = false, update lastTime, and handle audio
                 } else {
-                    // This case should ideally not be reached if isPaused was true at start
-                    console.log("Countdown finished, game was already running and unpaused.");
-                }
-                // Ensure background audio plays if it was paused. togglePause should handle this if called.
-                // If togglePause wasn't called (e.g. animationLoopStarted was false), explicitly play audio.
-                const backgroundAudio = document.getElementById('backgroundAudio');
-                if(backgroundAudio && backgroundAudio.paused) {
-                   backgroundAudio.play().catch(e => console.warn("Audio play failed post-countdown:", e));
+                    // Fallback, though isPaused should have been true
+                    console.warn("Countdown finished, but game was not in expected paused state. Ensuring unpaused.");
+                    // isPaused = false; // togglePause() above will handle this if it was true. If it was already false, this does nothing new.
+                    lastTime = performance.now(); // Still good to reset time
+                    const backgroundAudio = document.getElementById('backgroundAudio');
+                    if(backgroundAudio && backgroundAudio.paused) {
+                       backgroundAudio.play().catch(e => console.warn("Audio play failed post-countdown (fallback):", e));
+                    }
+                     if (!animationLoopStarted) { // If animation wasn't even started, ensure it is.
+                        console.warn("Animation loop was not started post-countdown and game not paused. Initiating.");
+                        initiateAnimationLoop(); // This path implies isPaused was false, so it might auto-play.
+                    }
                 }
             }
         }, 1000);
@@ -1904,16 +1904,15 @@ import { Water } from 'three/addons/objects/Water.js';
         const backgroundAudio = document.getElementById('backgroundAudio');
         if(backgroundAudio) backgroundAudio.play().catch(e => console.warn("Audio play failed in initiateAnimationLoop:", e));
 
-        let needsInitialPauseForCountdown = (totalPoints < 10);
+        let needsInitialPauseForOldCountdown = (totalPoints < 10 && !window.countdownStartedByButton); 
 
-        if (needsInitialPauseForCountdown && !isPaused) {
-            console.log("initiateAnimationLoop: Initializing first pause for countdown.");
-            togglePause();
-        } else if (isPaused && !needsInitialPauseForCountdown) {
-            console.log("initiateAnimationLoop: Game was paused by user, toggling to resume.");
-            togglePause();
-        } else if (isPaused && needsInitialPauseForCountdown) {
-            console.log("initiateAnimationLoop: Already paused, likely for countdown.");
+        if (needsInitialPauseForOldCountdown && !isPaused) { 
+            console.log("initiateAnimationLoop: Initializing first pause for old tutorial countdown.");
+            togglePause(); 
+        } else if (isPaused) { 
+            console.log("initiateAnimationLoop: Game is already paused, respecting that state.");
+        } else { 
+            console.log("initiateAnimationLoop: Game is not paused and doesn't need old tutorial pause.");
         }
 
         firstAnimateCall = true;
@@ -1925,30 +1924,50 @@ import { Water } from 'three/addons/objects/Water.js';
 
     window.startGame = function() {
         console.log("startGame function called by button click.");
-        const announcementDiv = document.getElementById('Announcement');
-        if(announcementDiv) announcementDiv.style.display = 'none';
-
-        const dashboard = document.getElementById('dashboard');
-        const pauseButton = document.getElementById('pauseButton');
-        if(dashboard) dashboard.style.display = 'block';
-        if(pauseButton) pauseButton.style.display = 'block';
-
         gameReadyToStartByUser = true; 
         console.log(`startGame: Flags - gameReadyToStartByUser: ${gameReadyToStartByUser}, assetsLoaded: ${assetsLoaded}, gameInitialized: ${gameInitialized}, animationLoopStarted: ${animationLoopStarted}`);
 
-        // Ensure assets are loaded and game is initialized (this logic can remain)
+        // Ensure assets are loaded and game is initialized
         if (!assetsLoaded || !gameInitialized) {
-            console.log("startGame: Assets or game not fully initialized yet. Waiting for LoadingManager or init.");
-            // LoadingManager.onLoad will call init() and then potentially initiateAnimationLoop
-            // if gameReadyToStartByUser is true. If init() was already called but assets only just
-            // finished, LoadingManager.onLoad might call initiateAnimationLoop directly.
-            // For now, we will let LoadingManager handle the first call to initiateAnimationLoop
-            // if assets weren't ready. The countdown will start once assets are ready.
-            // The key is that initiateAnimationLoop() itself shouldn't immediately unpause if our button countdown is desired.
-            // This might require a modification to initiateAnimationLoop later if it auto-unpauses too soon.
+            console.log("startGame: Assets or game not fully initialized yet. Waiting for LoadingManager or init then will proceed to countdown.");
+            // LoadingManager.onLoad will call init() if needed. 
+            // If gameReadyToStartByUser is true, LoadingManager.onLoad will then call initiateAnimationLoop.
+            // We need initiateAnimationLoop to NOT unpause if countdownStartedByButton is set.
+            // For now, we'll assume LoadingManager calls initiateAnimationLoop, which then respects isPaused.
+            // The critical part is that startGame itself will pause immediately after this check if assets ARE loaded.
         }
+
+        // Initiate the animation loop if it hasn't started, to allow rendering the first frame.
+        if (!animationLoopStarted) {
+            console.log("startGame: Animation loop not started, initiating for first frame render then pause.");
+            initiateAnimationLoop(); // This will call animate() at least once.
+                                     // animate() has an early exit if isPaused is true.
+        }
+
+        // Update UI elements (dashboard, pause button)
+        const dashboard = document.getElementById('dashboard');
+        if(dashboard) dashboard.style.display = 'block';
+        const pauseButton = document.getElementById('pauseButton');
+        if(pauseButton) pauseButton.style.display = 'block';
+       
+        // Hide announcement
+        const announcementDiv = document.getElementById('Announcement');
+        if(announcementDiv) announcementDiv.style.display = 'none';
         
-        // Call the new countdown sequence
+        // Ensure a render happens if possible, then pause.
+        if (renderer && scene && camera && !isPaused) { // If not already paused by initiateAnimationLoop's old logic
+            try {
+                renderer.render(scene, camera);
+                console.log("startGame: Explicitly rendered first frame.");
+            } catch (e) {
+                console.error("Error during explicit first frame render:", e);
+            }
+        }
+        isPaused = true; // Pause the game state BEFORE countdown
+        if (pauseButton) pauseButton.innerText = "Pause"; // Reflect paused state
+        lastTime = performance.now(); // Reset lastTime for when animate() resumes.
+        
+        console.log("startGame: Game paused for countdown. isPaused:", isPaused);
         startCountdownSequence(); 
     }
 
