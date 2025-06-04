@@ -140,6 +140,9 @@ import { Water } from 'three/addons/objects/Water.js';
     let isBoosting = false;
     let originalSpeed = 0; 
     const BOOST_FACTOR = 1.5; 
+    let bobbingAngle = 0;
+    const BOBBING_STRENGTH = 0.015; 
+    const BOBBING_SPEED = 0.05;    
 
     let shakeDuration = 0;
     let shakeTime = 0;
@@ -1334,6 +1337,12 @@ import { Water } from 'three/addons/objects/Water.js';
             targetCharacterRotationY = defaultRotationY;
             if (Math.abs(character.rotation.z) < rotationSpeed * 0.01) character.rotation.z = 0;
             targetCharacterRotationZ = 0;
+        }
+        
+        if (character && !isPaused && animationLoopStarted) { 
+            bobbingAngle += BOBBING_SPEED;
+            const bobbingOffset = Math.sin(bobbingAngle) * BOBBING_STRENGTH;
+            character.position.y = characterBaseYOffset + bobbingOffset;
         }
 
         const delta = currentTime - lastTime;
