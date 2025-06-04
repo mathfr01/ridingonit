@@ -120,7 +120,7 @@ import { Water } from 'three/addons/objects/Water.js';
     let currentLane = 1;
     let speed = 0.1;
     let chances = 3;
-    const SUBMERGE_AMOUNT = 0.3; 
+    const SUBMERGE_AMOUNT = 0.15; 
     let CharacterInitialY = 0;
     let characterBaseYOffset = 0;
 
@@ -140,17 +140,24 @@ import { Water } from 'three/addons/objects/Water.js';
     let isBoosting = false;
     let originalSpeed = 0; 
     const BOOST_FACTOR = 1.5; 
+
     let bobbingAngle = 0;
     const BOBBING_STRENGTH = 0.015; 
     const BOBBING_SPEED = 0.05;    
+
     let isJumping = false;
     let jumpProgress = 0; 
-    const JUMP_HEIGHT = 0.8; 
+    const JUMP_HEIGHT = 1.2; // Increased jump height
     const JUMP_DURATION = 30; 
     const JUMP_SQUASH_SCALE_Y = 0.7; 
     const JUMP_SQUASH_SCALE_XZ = 1.1; 
     let originalCharacterScaleY = 0.4; 
     let originalCharacterScaleXZ = 0.4;
+
+    const BANK_SPLASH_DENSITY = 0.5; 
+    const BANK_SPLASH_VIEW_LENGTH = 60; 
+    let bankSplashGlobalCooldown = { lastBankSplashTime: 0 };
+
 
     let shakeDuration = 0;
     let shakeTime = 0;
@@ -298,12 +305,11 @@ import { Water } from 'three/addons/objects/Water.js';
         const depthSegments = geometry.parameters.heightSegments; 
 
         const initialZOffset = 0.05; 
-        const maxBankHeight = 1.5;  // Changed from 0.75
-        const randomHeightFactor = 0.3; // Changed from 0.15
-
-        const outwardPushFactor = 0.5; // Changed from 0.25
+        const maxBankHeight = 1.5;
+        const randomHeightFactor = 0.3;
+        const outwardPushFactor = 0.5;
         const randomSidewaysFactorBase = 0.05; 
-        const randomSidewaysFactorWave = 0.25;  // Changed from 0.1
+        const randomSidewaysFactorWave = 0.25;
 
         for (let j = 0; j <= depthSegments; j++) { 
             for (let i = 0; i <= widthSegments; i++) { 
@@ -336,7 +342,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 positions.setX(index, currentLocalX);
                 
                 if (i === 0 || i === widthSegments) { 
-                     console.log(`Bank Debug: j=${j}, i=${i}, slope=${slopeFactor.toFixed(2)}, origX=${originalLocalX.toFixed(2)}, newX=${currentLocalX.toFixed(2)}, newZ=${currentLocalZ.toFixed(2)}`);
+                     // console.log(`Bank Debug: j=${j}, i=${i}, slope=${slopeFactor.toFixed(2)}, origX=${originalLocalX.toFixed(2)}, newX=${currentLocalX.toFixed(2)}, newZ=${currentLocalZ.toFixed(2)}`);
                 }
 
                 if (currentLocalX < minX) minX = currentLocalX;
@@ -384,40 +390,23 @@ import { Water } from 'three/addons/objects/Water.js';
 
     function getTargetTerrainMesh(xPos, zPos) {
         if (!character || !leftForestMesh1 || !leftForestMesh2 || !rightForestMesh1 || !rightForestMesh2) {
-            // console.warn(`getTargetTerrainMesh: Aborting. Character: ${!!character}, LFM1: ${!!leftForestMesh1}, LFM2: ${!!leftForestMesh2}, RFM1: ${!!rightForestMesh1}, RFM2: ${!!rightForestMesh2}`);
             return null;
         }
-        // console.log(`getTargetTerrainMesh Input: xPos=${xPos.toFixed(2)}, zPos=${zPos.toFixed(2)}`);
-
         const meshesToCheck = [];
-        if (xPos < 0) { // Left side
+        if (xPos < 0) { 
             meshesToCheck.push(leftForestMesh1, leftForestMesh2);
-            // console.log(`Item on Left. LFM1_Z: ${leftForestMesh1.position.z.toFixed(2)}, LFM2_Z: ${leftForestMesh2.position.z.toFixed(2)}`);
-        } else { // Right side
+        } else { 
             meshesToCheck.push(rightForestMesh1, rightForestMesh2);
-            // console.log(`Item on Right. RFM1_Z: ${rightForestMesh1.position.z.toFixed(2)}, RFM2_Z: ${rightForestMesh2.position.z.toFixed(2)}`);
         }
-
         for (const mesh of meshesToCheck) {
-            if (!mesh) {
-                // console.log("Skipping a null mesh in meshesToCheck");
-                continue;
-            }
-            
+            if (!mesh) continue;
             const halfLength = forestLength / 2;
-            // mesh.position.z is the CENTER of the mesh segment in world space.
             const meshMinZ = mesh.position.z - halfLength;
             const meshMaxZ = mesh.position.z + halfLength;
-
-            // console.log(`Checking mesh UUID: ${mesh.uuid} (World Z Center: ${mesh.position.z.toFixed(2)}) for item @ worldZ ${zPos.toFixed(2)}. Mesh Z Range: [${meshMinZ.toFixed(2)}, ${meshMaxZ.toFixed(2)})`);
-
-            if (zPos >= meshMinZ && zPos < meshMaxZ) { // Use < for meshMaxZ for non-overlapping ranges
-                // console.log(`Selected mesh ${mesh.uuid} for item at Z ${zPos.toFixed(2)}`);
+            if (zPos >= meshMinZ && zPos < meshMaxZ) {
                 return mesh;
             }
         }
-        // console.warn(`No suitable terrain mesh found for XZ: ${xPos.toFixed(2)}, ${zPos.toFixed(2)}. Checked ${meshesToCheck.length} meshes.`);
-        // Fallback: if slightly outside, pick the closest one (can happen with floating point or items right on an edge being regenerated)
         let closestMesh = null;
         let minDistance = Infinity;
         for (const mesh of meshesToCheck) {
@@ -428,12 +417,9 @@ import { Water } from 'three/addons/objects/Water.js';
                 closestMesh = mesh;
             }
         }
-        if (closestMesh && minDistance < forestLength / 4) { // Only if it's reasonably close
-             // console.warn(`Fallback: Choosing closest mesh ${closestMesh.uuid} (dist: ${minDistance.toFixed(2)}) for item at Z ${zPos.toFixed(2)}`);
+        if (closestMesh && minDistance < forestLength / 4) { 
             return closestMesh;
         }
-
-        // console.error(`CRITICAL: No mesh truly found for XZ: ${xPos.toFixed(2)}, ${zPos.toFixed(2)}. Last resort: null.`);
         return null;
     }
 
@@ -476,19 +462,16 @@ import { Water } from 'three/addons/objects/Water.js';
                     tree.position.set(xPos, 50, zPos); 
 
                     const targetTerrainMesh = getTargetTerrainMesh(tree.position.x, tree.position.z);
-                    // console.log(`addTrees: Item at XZ (${tree.position.x.toFixed(2)}, ${tree.position.z.toFixed(2)}). Target mesh: ${targetTerrainMesh ? targetTerrainMesh.uuid : 'null'}`);
 
                     if (targetTerrainMesh) {
-                        targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                        targetTerrainMesh.updateMatrixWorld(); 
                         const rayOrigin = new THREE.Vector3(tree.position.x, 50, tree.position.z);
                         const rayDirection = new THREE.Vector3(0, -1, 0);
                         raycaster.set(rayOrigin, rayDirection);
                         const intersects = raycaster.intersectObject(targetTerrainMesh, false);
-                        // console.log(`Raycasting for tree ${i}. Target: ${targetTerrainMesh.uuid}, Origin: ${rayOrigin.y.toFixed(2)}, Intersects: ${intersects.length}`);
 
                         if (intersects.length > 0) {
                             tree.position.y = intersects[0].point.y;
-                            // console.log(`Tree ${i} Y set to ${tree.position.y.toFixed(2)}`);
                         } else {
                             tree.position.y = -2.1; 
                             console.warn(`Tree raycast FAILED. Tree XZ: (${tree.position.x.toFixed(2)}, ${tree.position.z.toFixed(2)}). Target: ${targetTerrainMesh.uuid}, Target_Z: ${targetTerrainMesh.position.z.toFixed(2)}`);
@@ -526,7 +509,7 @@ import { Water } from 'three/addons/objects/Water.js';
             console.warn("Character or one or more terrain meshes not ready in addGrass, deferring or skipping.");
             return;
         }
-        if (!raycaster) { // Ensure raycaster is available
+        if (!raycaster) { 
             raycaster = new THREE.Raycaster();
             console.log("Raycaster initialized in addGrass");
         }
@@ -554,25 +537,24 @@ import { Water } from 'three/addons/objects/Water.js';
             }
             
             const patchZ = (character ? character.position.z : 0) - (forestLength / 2) + (Math.random() * forestLength);
-            patchMesh.position.set(patchX, 50, patchZ); // Initial Y high for raycasting
+            patchMesh.position.set(patchX, 50, patchZ); 
 
             const targetTerrainMesh = getTargetTerrainMesh(patchX, patchZ);
             if (targetTerrainMesh) {
-                targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                targetTerrainMesh.updateMatrixWorld(); 
                 const rayOrigin = new THREE.Vector3(patchMesh.position.x, 50, patchMesh.position.z);
                 const rayDirection = new THREE.Vector3(0, -1, 0);
                 raycaster.set(rayOrigin, rayDirection);
                 const intersects = raycaster.intersectObject(targetTerrainMesh, false);
-                // console.log(`Raycasting for grass ${i}. Target: ${targetTerrainMesh.uuid}, Origin: ${rayOrigin.y.toFixed(2)}, Intersects: ${intersects.length}`);
 
                 if (intersects.length > 0) {
                     patchMesh.position.y = intersects[0].point.y;
                 } else {
-                    patchMesh.position.y = -2.1; // Fallback Y
+                    patchMesh.position.y = -2.1; 
                     console.warn("Grass patch raycast FAILED. Patch XZ:", patchMesh.position.x.toFixed(2), patchMesh.position.z.toFixed(2), "Targeted mesh:", targetTerrainMesh.uuid, "Target_Z:", targetTerrainMesh.position.z.toFixed(2));
                 }
             } else {
-                patchMesh.position.y = -2.1; // Fallback Y
+                patchMesh.position.y = -2.1; 
                 console.warn("No target terrain mesh for grass patch at XZ:", patchMesh.position.x.toFixed(2), patchMesh.position.z.toFixed(2));
             }
             scene.add(patchMesh);
@@ -1145,7 +1127,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
         console.log("Attempting to add water planes. Water Normals loaded:", waterNormals && waterNormals.image && waterNormals.image.complete);
         if (Water && waterNormals && waterNormals.image && waterNormals.image.complete && waterNormals.image.naturalHeight !== 0) {
-            const waterPlaneGeometry = new THREE.PlaneGeometry(10, waterLength, 10, 50);
+            const waterPlaneGeometry = new THREE.PlaneGeometry(13, waterLength, 10, 50); // Width changed to 13
 
             let sunDir = new THREE.Vector3(0,1,0);
             if (sky && sky.material.uniforms.sunPosition) {
@@ -1255,7 +1237,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 const yScale = baseScale * (0.7 + Math.random() * 0.6); 
                 obstacle.scale.set(baseScale, yScale, baseScale);
                 obstacle.rotation.y = Math.random() * Math.PI * 2;
-                obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.35, -20 - i * 20); 
+                obstacle.position.set(lanePositions[Math.floor(Math.random() * 3)], -0.20, -20 - i * 20); // Adjusted Y
                 obstacle.traverse(node => { if (node.isMesh) node.castShadow = true; });
                 obstacles.push(obstacle);
                 scene.add(obstacle);
@@ -1281,7 +1263,7 @@ import { Water } from 'three/addons/objects/Water.js';
         }, undefined, (error) => console.error("Error loading gold_nugget.glb", error));
 
         document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp); // Added keyup listener
+        document.addEventListener('keyup', onKeyUp); 
         document.addEventListener('touchstart', onTouchStart);
         document.addEventListener('touchmove', onTouchMove);
         document.addEventListener('touchend', onTouchEnd);
@@ -1294,7 +1276,7 @@ import { Water } from 'three/addons/objects/Water.js';
                 console.log("Lumberjack_on_a_log.glb loaded successfully in addCharacter.");
                 character = gltf.scene;
                 character.scale.set(0.4, 0.4, 0.4);
-                originalCharacterScaleY = character.scale.y; // Store original scales
+                originalCharacterScaleY = character.scale.y; 
                 originalCharacterScaleXZ = character.scale.x;
                 const box = new THREE.Box3().setFromObject(character);
                 const size = box.getSize(new THREE.Vector3());
@@ -1353,38 +1335,78 @@ import { Water } from 'three/addons/objects/Water.js';
         
         if (character && !isPaused && animationLoopStarted) {
             if (isJumping) {
-                jumpProgress += 1 / JUMP_DURATION; 
+                jumpProgress += 1 / JUMP_DURATION;
+                let currentJumpArcY = 0; // Y offset from jump arc
 
-                const jumpArc = Math.sin(jumpProgress * Math.PI); 
-                character.position.y = characterBaseYOffset + jumpArc * JUMP_HEIGHT;
-
-                // Squash and Stretch effect
-                if (jumpProgress < 0.15) { // Wind up / Squash
-                    character.scale.set(originalCharacterScaleXZ * JUMP_SQUASH_SCALE_XZ, originalCharacterScaleY * JUMP_SQUASH_SCALE_Y, originalCharacterScaleXZ * JUMP_SQUASH_SCALE_XZ);
-                } else if (jumpProgress < 0.5) { // Stretch upwards
-                     const stretchProgress = (jumpProgress - 0.15) / 0.35; 
-                     character.scale.set(
-                         originalCharacterScaleXZ * (JUMP_SQUASH_SCALE_XZ - (JUMP_SQUASH_SCALE_XZ - originalCharacterScaleXZ) * stretchProgress),
-                         originalCharacterScaleY * (JUMP_SQUASH_SCALE_Y + (originalCharacterScaleY * 1.2 - JUMP_SQUASH_SCALE_Y) * stretchProgress), 
-                         originalCharacterScaleXZ * (JUMP_SQUASH_SCALE_XZ - (JUMP_SQUASH_SCALE_XZ - originalCharacterScaleXZ) * stretchProgress)
-                     );
-                } else if (jumpProgress < 0.85) { // Hang time / Start returning to normal scale
-                    const returnProgress = (jumpProgress - 0.5) / 0.35; 
+                // Phase 1: Quick Anticipation (Squash)
+                if (jumpProgress < 0.15) {
                     character.scale.set(
-                        originalCharacterScaleXZ * (1 + (originalCharacterScaleXZ - 1) * returnProgress), 
-                        originalCharacterScaleY * ( (originalCharacterScaleY*1.2) - ((originalCharacterScaleY*1.2) - originalCharacterScaleY) * returnProgress),
-                        originalCharacterScaleXZ * (1 + (originalCharacterScaleXZ - 1) * returnProgress)
+                        originalCharacterScaleXZ * 1.15,
+                        originalCharacterScaleY * 0.7,
+                        originalCharacterScaleXZ * 1.15
                     );
-                } else { // Landing / Restore original scale
-                    character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ);
+                    // Y position remains at base during anticipation
+                    character.position.y = characterBaseYOffset; 
+                } 
+                // Phase 2: Full Upward Stretch (Character still mostly grounded)
+                else if (jumpProgress < 0.3) { 
+                    const stretchProgress = (jumpProgress - 0.15) / (0.3 - 0.15); // Normalize 0.15-0.3 to 0-1
+                    character.scale.set(
+                        originalCharacterScaleXZ * (1.15 - 0.15 * stretchProgress), // XZ from 1.15 back to 1.0
+                        originalCharacterScaleY * (0.7 + (1.4 - 0.7) * stretchProgress),  // Y from 0.7 to 1.4 (max stretch)
+                        originalCharacterScaleXZ * (1.15 - 0.15 * stretchProgress)
+                    );
+                    // Character still at base Y or just starting a tiny lift for the stretch
+                    character.position.y = characterBaseYOffset; 
+                } 
+                // Phase 3: Actual Upward Movement / Airtime 
+                else if (jumpProgress < 0.7) {
+                    // Remap jumpProgress for the arc part (0.3 to 0.7 of total progress mapped to 0 to PI for sin)
+                    const arcProgress = (jumpProgress - 0.3) / (0.7 - 0.3);
+                    currentJumpArcY = Math.sin(arcProgress * Math.PI) * JUMP_HEIGHT;
+                    character.position.y = characterBaseYOffset + currentJumpArcY;
+
+                    // Scale normalizes during airtime
+                    const airScaleProgress = (jumpProgress - 0.3) / (0.7 - 0.3); // Normalize 0.3-0.7 to 0-1
+                    character.scale.set(
+                        originalCharacterScaleXZ, // Normal XZ
+                        originalCharacterScaleY * (1.4 - (1.4 - 1.0) * airScaleProgress),  // Y from 1.4 back to 1.0
+                        originalCharacterScaleXZ
+                    );
+                } 
+                // Phase 4: Landing (Slight Squash)
+                else if (jumpProgress < 0.85) {
+                    const fullArcProgress = (jumpProgress - 0.3) / (1.0 - 0.3); // Map 0.3-1.0 of jump to 0-1 for sin input
+                    currentJumpArcY = Math.sin(fullArcProgress * Math.PI) * JUMP_HEIGHT;
+                    character.position.y = characterBaseYOffset + currentJumpArcY;
+                    
+                    const landSquashProgress = (jumpProgress - 0.7) / (0.85 - 0.7); 
+                    character.scale.set(
+                        originalCharacterScaleXZ * (1.0 + 0.1 * landSquashProgress),
+                        originalCharacterScaleY * (1.0 - (1.0 - 0.8) * landSquashProgress),
+                        originalCharacterScaleXZ * (1.0 + 0.1 * landSquashProgress)
+                    );
+                } 
+                // Phase 5: Return to Normal Scale (as jumpProgress approaches 1.0)
+                else { 
+                    // Y continues descent via arc
+                    const fullArcProgress = (jumpProgress - 0.3) / (1.0 - 0.3);
+                    currentJumpArcY = Math.sin(fullArcProgress * Math.PI) * JUMP_HEIGHT;
+                    character.position.y = characterBaseYOffset + currentJumpArcY;
+
+                    const resetProgress = (jumpProgress - 0.85) / (1.0 - 0.85);
+                    character.scale.set(
+                        originalCharacterScaleXZ * (1.1 - 0.1 * resetProgress),
+                        originalCharacterScaleY * (0.8 + (1.0 - 0.8) * resetProgress),
+                        originalCharacterScaleXZ * (1.1 - 0.1 * resetProgress)
+                    );
                 }
 
                 if (jumpProgress >= 1) {
                     isJumping = false;
                     jumpProgress = 0;
                     character.position.y = characterBaseYOffset; 
-                    character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ); 
-                    console.log("Jump finished");
+                    character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ);
                 }
             } else { // Not jumping, apply bobbing
                 bobbingAngle += BOBBING_SPEED;
@@ -1512,17 +1534,14 @@ import { Water } from 'three/addons/objects/Water.js';
                     tree.position.z = newZPos;
 
                     const targetTerrainMesh = getTargetTerrainMesh(newXPos, newZPos);
-                    // console.log(`Recycle Tree: Item at XZ (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target mesh: ${targetTerrainMesh ? targetTerrainMesh.uuid : 'null'}`);
                     if (targetTerrainMesh && raycaster) {
-                        targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                        targetTerrainMesh.updateMatrixWorld(); 
                         const origin = new THREE.Vector3(newXPos, 50, newZPos); 
                         const direction = new THREE.Vector3(0, -1, 0); 
                         raycaster.set(origin, direction);
                         const intersects = raycaster.intersectObject(targetTerrainMesh, false);
-                        // console.log(`Raycasting for recycled tree. Target: ${targetTerrainMesh.uuid}, Origin: ${origin.y.toFixed(2)}, Intersects: ${intersects.length}`);
                         if (intersects.length > 0) {
                             tree.position.y = intersects[0].point.y;
-                            // console.log(`Recycled Tree Y set to ${tree.position.y.toFixed(2)}`);
                         } else {
                             tree.position.y = -2.1; 
                             console.warn(`Tree raycast (recycle) FAILED. Tree XZ: (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target: ${targetTerrainMesh.uuid}, Target_Z: ${targetTerrainMesh.position.z.toFixed(2)}`);
@@ -1569,17 +1588,14 @@ import { Water } from 'three/addons/objects/Water.js';
                     grassPatch.position.z = newZPos;
 
                     const targetTerrainMesh = getTargetTerrainMesh(newXPos, newZPos);
-                    // console.log(`Recycle Grass: Item at XZ (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target mesh: ${targetTerrainMesh ? targetTerrainMesh.uuid : 'null'}`);
                     if (targetTerrainMesh && raycaster) {
-                        targetTerrainMesh.updateMatrixWorld(); // Ensure matrix is up-to-date
+                        targetTerrainMesh.updateMatrixWorld(); 
                         const rayOrigin = new THREE.Vector3(newXPos, 50, newZPos);
                         const rayDirection = new THREE.Vector3(0, -1, 0);
                         raycaster.set(rayOrigin, rayDirection);
                         const intersects = raycaster.intersectObject(targetTerrainMesh, false);
-                        // console.log(`Raycasting for recycled grass. Target: ${targetTerrainMesh.uuid}, Origin: ${rayOrigin.y.toFixed(2)}, Intersects: ${intersects.length}`);
                         if (intersects.length > 0) {
                             grassPatch.position.y = intersects[0].point.y;
-                            // console.log(`Recycled Grass Y set to ${grassPatch.position.y.toFixed(2)}`);
                         } else {
                             grassPatch.position.y = -2.1; 
                             console.warn(`Grass patch raycast (recycle) FAILED. Patch XZ: (${newXPos.toFixed(2)}, ${newZPos.toFixed(2)}). Target: ${targetTerrainMesh.uuid}, Target_Z: ${targetTerrainMesh.position.z.toFixed(2)}`);
@@ -1598,11 +1614,57 @@ import { Water } from 'three/addons/objects/Water.js';
                         grassPatch.position.x = 6 + (2.5 + Math.random() * (144 - 5));
                     }
                     grassPatch.position.z = -(forestLength / 2) - Math.random() * (forestLength / 2);
-                    // Y position remains unchanged or as set by addGrass if character was null then
                 }
             }
 
             updateParticles(1/fps); 
+
+            // Bank Edge Splashes / Foam - DEBUG VISIBILITY
+            if (character && water1 && !isPaused && animationLoopStarted && bankSplashGlobalCooldown) {
+                const now = performance.now();
+                const bankSplashCooldownPeriod = 75; // milliseconds
+                if (now - bankSplashGlobalCooldown.lastBankSplashTime > bankSplashCooldownPeriod) {
+                    console.log(`Emitting bank splashes at time: ${now}`); 
+                    bankSplashGlobalCooldown.lastBankSplashTime = now;
+
+                    const characterZ = character.position.z;
+                    const viewMinZ = characterZ - BANK_SPLASH_VIEW_LENGTH / 2;
+                    const viewMaxZ = characterZ + BANK_SPLASH_VIEW_LENGTH / 2;
+                    const waterY = water1.position.y + 0.05; // Slightly above water surface
+
+                    for (let z = viewMinZ; z < viewMaxZ; z += (1 / BANK_SPLASH_DENSITY)) {
+                        if (Math.random() < 0.7) continue; // Random chance to skip some, for sparser effect
+
+                        const randomXOffset = (Math.random() - 0.5) * 0.5; // Small random sideways jitter
+                        
+                        // Left Bank
+                        const leftBankEmitterX = -6.0 + randomXOffset; 
+                        const emitPosLeft = new THREE.Vector3(leftBankEmitterX, waterY, z);
+                        emitSplash(emitPosLeft,
+                           5,                                // count (increased significantly from 1)
+                           0.1 + Math.random() * 0.05,     // baseVelocity (increased)
+                           (Math.PI * 0.25 + (Math.random() - 0.5) * 0.5), // angleOffset
+                           1.0,                              // speedMultiplier
+                           1.5,                              // upwardSpeedBias (increased significantly)
+                           2.0,                              // particleScaleMultiplier (increased significantly)
+                           2.0                               // lifeMultiplier (moderate, to see them clearly)
+                          ); 
+
+                        // Right Bank
+                        const rightBankEmitterX = 6.0 + randomXOffset;
+                        const emitPosRight = new THREE.Vector3(rightBankEmitterX, waterY, z);
+                        emitSplash(emitPosRight,
+                           5,                                // count
+                           0.1 + Math.random() * 0.05,     // baseVelocity
+                           (Math.PI * 0.75 + (Math.random() - 0.5) * 0.5), // angleOffset (pointing other way)
+                           1.0,                              // speedMultiplier
+                           1.5,                              // upwardSpeedBias
+                           2.0,                              // particleScaleMultiplier
+                           2.0                               // lifeMultiplier
+                          );
+                    }
+                }
+            }
 
             const waterSurfaceY = water1 ? water1.position.y : -0.15;
             for (let obstacle of obstacles) {
@@ -1853,4 +1915,3 @@ import { Water } from 'three/addons/objects/Water.js';
 </div>
 </body>
 </html>
-
