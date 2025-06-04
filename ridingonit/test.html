@@ -1337,22 +1337,12 @@ import { Water } from 'three/addons/objects/Water.js';
     function updateCamera() {
         if (!character || !camera) return;
         const desiredX = character.position.x;
-        // Keep camera Y position stable relative to the character's base Y, not its jumping Y.
-        // 'characterBaseYOffset' is the character's Y position when on the log, not jumping.
-        // Add a fixed offset for camera height, e.g., 1.0 or similar to existing.
-        const fixedCameraHeightAboveBase = 1.0; 
-        const desiredY = characterBaseYOffset + fixedCameraHeightAboveBase; 
-        const desiredZ = character.position.z + 1.5; // Keep Z tracking the same
+        const desiredY = character.position.y + 1.0; // Reverted line
+        const desiredZ = character.position.z + 1.5;
 
         camera.position.x = desiredX;
         camera.position.y = desiredY;
         camera.position.z = desiredZ;
-
-        // Ensure camera continues to look at the character, or slightly in front.
-        // The existing camera.lookAt in init() sets the initial lookAt. 
-        // If the camera's lookAt is not dynamically updated elsewhere to follow the character,
-        // we might need to add: camera.lookAt(character.position.x, characterBaseYOffset, character.position.z);
-        // For now, let's assume the existing lookAt behavior is sufficient and only change camera.position.y.
     }
 
     function animate(currentTime) {
