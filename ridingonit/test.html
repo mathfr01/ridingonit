@@ -114,7 +114,7 @@ import { Water } from 'three/addons/objects/Water.js';
     let leftForestMesh1, rightForestMesh1, leftForestMesh2, rightForestMesh2; 
     const forestLength = 600; 
     const waterLength = 600;  
-    let raycaster; // Added Raycaster
+    let raycaster; 
 
     let lanePositions = [-2, 0, 2];
     let currentLane = 1;
@@ -143,6 +143,14 @@ import { Water } from 'three/addons/objects/Water.js';
     let bobbingAngle = 0;
     const BOBBING_STRENGTH = 0.015; 
     const BOBBING_SPEED = 0.05;    
+    let isJumping = false;
+    let jumpProgress = 0; 
+    const JUMP_HEIGHT = 0.8; 
+    const JUMP_DURATION = 30; 
+    const JUMP_SQUASH_SCALE_Y = 0.7; 
+    const JUMP_SQUASH_SCALE_XZ = 1.1; 
+    let originalCharacterScaleY = 0.4; 
+    let originalCharacterScaleXZ = 0.4;
 
     let shakeDuration = 0;
     let shakeTime = 0;
@@ -290,12 +298,12 @@ import { Water } from 'three/addons/objects/Water.js';
         const depthSegments = geometry.parameters.heightSegments; 
 
         const initialZOffset = 0.05; 
-        const maxBankHeight = 0.75;  
-        const randomHeightFactor = 0.15; 
+        const maxBankHeight = 1.5;  // Changed from 0.75
+        const randomHeightFactor = 0.3; // Changed from 0.15
 
-        const outwardPushFactor = 0.25; 
+        const outwardPushFactor = 0.5; // Changed from 0.25
         const randomSidewaysFactorBase = 0.05; 
-        const randomSidewaysFactorWave = 0.1;  
+        const randomSidewaysFactorWave = 0.25;  // Changed from 0.1
 
         for (let j = 0; j <= depthSegments; j++) { 
             for (let i = 0; i <= widthSegments; i++) { 
@@ -773,8 +781,8 @@ import { Water } from 'three/addons/objects/Water.js';
             if(event.key === 'p' && gameInitialized) togglePause();
             return;
         }
-        if (isPaused && event.key !== 'p' && event.key.toLowerCase() !== 'w' && event.key !== 'ArrowUp') return;
-        if (isPaused && (event.key.toLowerCase() === 'w' || event.key === 'ArrowUp')) return; // Don't boost if paused
+        if (isPaused && event.key !== 'p' && event.key.toLowerCase() !== 'w' && event.key !== 'ArrowUp' && event.code !== 'Space') return;
+        if (isPaused && (event.key.toLowerCase() === 'w' || event.key === 'ArrowUp' || event.code === 'Space')) return; 
 
         const turnAudio = document.getElementById('turnAudio');
         if (isTransitioning && (event.key === 'ArrowLeft' || event.key === 'a' || event.key === 'ArrowRight' || event.key === 'd')) {
@@ -787,37 +795,39 @@ import { Water } from 'three/addons/objects/Water.js';
             }
             return;
         }
-        // Allow boosting even if transitioning lanes, but not if already transitioning for other reasons.
-        // if (isTransitioning) return; // Original check, might be too restrictive for boost.
 
         if (event.key === 'ArrowLeft' || event.key === 'a') {
-            if (isTransitioning) return; // Prevent lane change if already changing lanes
+            if (isTransitioning) return; 
             if(turnAudio) turnAudio.play();
             targetLane = Math.max(0, currentLane - 1);
             targetCharacterRotationY = Math.PI + Math.PI / 8;
             targetCharacterRotationZ = LEAN_ANGLE;
         } else if (event.key === 'ArrowRight' || event.key === 'd') {
-            if (isTransitioning) return; // Prevent lane change if already changing lanes
+            if (isTransitioning) return; 
             if(turnAudio) turnAudio.play();
             targetLane = Math.min(2, currentLane + 1);
             targetCharacterRotationY = Math.PI - Math.PI / 8;
             targetCharacterRotationZ = -LEAN_ANGLE;
         } else if (event.key === 'p') { 
             togglePause(); 
-            return; // Return after toggling pause
+            return; 
         } else if ((event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') && !isPaused && animationLoopStarted) {
             if (!isBoosting) {
                 originalSpeed = speed;
                 speed *= BOOST_FACTOR;
-                // speed = Math.min(speed, MAX_TOTAL_SPEED); // Optional: MAX_TOTAL_SPEED not defined yet
                 isBoosting = true;
                 console.log("Boost ON. Speed:", speed.toFixed(3));
             }
-            return; // Return to ensure no lane transition logic is accidentally triggered
+            return; 
+        } else if (event.code === 'Space' && !isJumping && !isPaused && animationLoopStarted && character) {
+            isJumping = true;
+            jumpProgress = 0;
+            console.log("Jump initiated");
+            return; 
         }
-        else { return; } // Explicitly return if no relevant key is pressed
+        else { return; } 
 
-        if (!isTransitioning && targetLane !== currentLane && character) { // Check !isTransitioning before starting a new one
+        if (!isTransitioning && targetLane !== currentLane && character) { 
             isTransitioning = true;
 
             const waterY = water1 ? water1.position.y : -0.15;
@@ -1284,6 +1294,8 @@ import { Water } from 'three/addons/objects/Water.js';
                 console.log("Lumberjack_on_a_log.glb loaded successfully in addCharacter.");
                 character = gltf.scene;
                 character.scale.set(0.4, 0.4, 0.4);
+                originalCharacterScaleY = character.scale.y; // Store original scales
+                originalCharacterScaleXZ = character.scale.x;
                 const box = new THREE.Box3().setFromObject(character);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
@@ -1339,10 +1351,46 @@ import { Water } from 'three/addons/objects/Water.js';
             targetCharacterRotationZ = 0;
         }
         
-        if (character && !isPaused && animationLoopStarted) { 
-            bobbingAngle += BOBBING_SPEED;
-            const bobbingOffset = Math.sin(bobbingAngle) * BOBBING_STRENGTH;
-            character.position.y = characterBaseYOffset + bobbingOffset;
+        if (character && !isPaused && animationLoopStarted) {
+            if (isJumping) {
+                jumpProgress += 1 / JUMP_DURATION; 
+
+                const jumpArc = Math.sin(jumpProgress * Math.PI); 
+                character.position.y = characterBaseYOffset + jumpArc * JUMP_HEIGHT;
+
+                // Squash and Stretch effect
+                if (jumpProgress < 0.15) { // Wind up / Squash
+                    character.scale.set(originalCharacterScaleXZ * JUMP_SQUASH_SCALE_XZ, originalCharacterScaleY * JUMP_SQUASH_SCALE_Y, originalCharacterScaleXZ * JUMP_SQUASH_SCALE_XZ);
+                } else if (jumpProgress < 0.5) { // Stretch upwards
+                     const stretchProgress = (jumpProgress - 0.15) / 0.35; 
+                     character.scale.set(
+                         originalCharacterScaleXZ * (JUMP_SQUASH_SCALE_XZ - (JUMP_SQUASH_SCALE_XZ - originalCharacterScaleXZ) * stretchProgress),
+                         originalCharacterScaleY * (JUMP_SQUASH_SCALE_Y + (originalCharacterScaleY * 1.2 - JUMP_SQUASH_SCALE_Y) * stretchProgress), 
+                         originalCharacterScaleXZ * (JUMP_SQUASH_SCALE_XZ - (JUMP_SQUASH_SCALE_XZ - originalCharacterScaleXZ) * stretchProgress)
+                     );
+                } else if (jumpProgress < 0.85) { // Hang time / Start returning to normal scale
+                    const returnProgress = (jumpProgress - 0.5) / 0.35; 
+                    character.scale.set(
+                        originalCharacterScaleXZ * (1 + (originalCharacterScaleXZ - 1) * returnProgress), 
+                        originalCharacterScaleY * ( (originalCharacterScaleY*1.2) - ((originalCharacterScaleY*1.2) - originalCharacterScaleY) * returnProgress),
+                        originalCharacterScaleXZ * (1 + (originalCharacterScaleXZ - 1) * returnProgress)
+                    );
+                } else { // Landing / Restore original scale
+                    character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ);
+                }
+
+                if (jumpProgress >= 1) {
+                    isJumping = false;
+                    jumpProgress = 0;
+                    character.position.y = characterBaseYOffset; 
+                    character.scale.set(originalCharacterScaleXZ, originalCharacterScaleY, originalCharacterScaleXZ); 
+                    console.log("Jump finished");
+                }
+            } else { // Not jumping, apply bobbing
+                bobbingAngle += BOBBING_SPEED;
+                const bobbingOffset = Math.sin(bobbingAngle) * BOBBING_STRENGTH;
+                character.position.y = characterBaseYOffset + bobbingOffset;
+            }
         }
 
         const delta = currentTime - lastTime;
@@ -1583,6 +1631,32 @@ import { Water } from 'three/addons/objects/Water.js';
                         
                         obstacle.userData.lastRearWakeTime = now; 
                     }
+
+                    const sideSplashCooldown = 150 + Math.random() * 100;
+                    if (!obstacle.userData.lastSideSplashTime || (now - obstacle.userData.lastSideSplashTime > sideSplashCooldown)) {
+                        const sideSplashPosLeft = new THREE.Vector3(obstacle.position.x - obstacle.scale.x * 0.55, waterSurfaceY + 0.05, obstacle.position.z);
+                        emitSplash(sideSplashPosLeft, 
+                                   2 + Math.floor(Math.random() * 2), // count
+                                   0.025 + Math.random() * 0.015,    // baseVelocity
+                                   (Math.PI * 3/4) + (Math.random() - 0.5) * 0.4, // angleOffset (outwards-left and slightly back)
+                                   1.0,                               // speedMultiplier
+                                   0.4,                               // upwardSpeedBias
+                                   1.2,                               // particleScaleMultiplier
+                                   1.5                                // lifeMultiplier
+                                  );
+            
+                        const sideSplashPosRight = new THREE.Vector3(obstacle.position.x + obstacle.scale.x * 0.55, waterSurfaceY + 0.05, obstacle.position.z);
+                        emitSplash(sideSplashPosRight,
+                                   2 + Math.floor(Math.random() * 2), // count
+                                   0.025 + Math.random() * 0.015,    // baseVelocity
+                                   (Math.PI * 1/4) + (Math.random() - 0.5) * 0.4,  // angleOffset (outwards-right and slightly back)
+                                   1.0,                               // speedMultiplier
+                                   0.4,                               // upwardSpeedBias
+                                   1.2,                               // particleScaleMultiplier
+                                   1.5                                // lifeMultiplier
+                                  );
+                        obstacle.userData.lastSideSplashTime = now;
+                    }
                 }
             }
 
@@ -1779,3 +1853,4 @@ import { Water } from 'three/addons/objects/Water.js';
 </div>
 </body>
 </html>
+
